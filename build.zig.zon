@@ -1,0 +1,17 @@
+.{
+    .name = .branch,
+    .version = "0.0.0",
+    .fingerprint = 0xbb861b1f6e7bbda0, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .dvui = .{
+            .url = "https://github.com/david-vanderson/dvui/archive/c8759e66e0a6081dc67381bd7e5615da25c8aed4.tar.gz",
+            .hash = "dvui-0.4.0-dev-AQFJmY372gCzFnHrszjjIoYJW7wSYjmAr8CCWy562PDj",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
