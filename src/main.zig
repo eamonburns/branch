@@ -1,5 +1,4 @@
 const std = @import("std");
-
 const dvui = @import("dvui");
 
 const branch = @import("branch");
@@ -39,37 +38,53 @@ var warn_on_quit_closing = false;
 fn appInit(win: *dvui.Window) !void {
     orig_content_scale = win.content_scale;
 
-    var menu: branch.Menu = .init;
+    const root_menu = try gpa_singleton.create(branch.Menu);
+    root_menu.* = .init;
 
-    try menu.items.append(gpa_singleton, .{
-        .key = null,
+    try root_menu.items.append(gpa_singleton, .{
+        .key = .f,
         .name = "first",
         .value = .none,
     });
-
-    try menu.items.append(gpa_singleton, .{
-        .key = null,
+    try root_menu.items.append(gpa_singleton, .{
+        .key = .s,
         .name = "second",
         .value = .none,
     });
 
-    try menu.items.append(gpa_singleton, .{
-        .key = null,
-        .name = "third",
-        .value = .{ .menu = .init },
+    var sub_menu: branch.Menu = .init;
+    try sub_menu.items.append(gpa_singleton, .{
+        .key = .a,
+        .name = "alpha",
+        .value = .none,
     });
+    try sub_menu.items.append(gpa_singleton, .{
+        .key = .b,
+        .name = "beta",
+        .value = .none,
+    });
+
+    try root_menu.items.append(gpa_singleton, .{
+        .key = .t,
+        .name = "third",
+        .value = .{ .menu = sub_menu },
+    });
+
+    var menu_stack: std.ArrayList(*branch.Menu) = .empty;
+    try menu_stack.append(gpa_singleton, root_menu);
 
     app_singleton = .{
         .gpa = gpa_singleton,
         .frame_arena = .init(gpa_singleton),
-        .current_menu = menu,
+        .menu_stack = menu_stack,
     };
 }
 
 fn appDeinit() void {
     _ = debug_allocator.deinit();
     app_singleton.frame_arena.deinit();
-    app_singleton.current_menu.deinit(app_singleton.gpa);
+    const root_menu = app_singleton.menu_stack.items[0];
+    root_menu.deinit(gpa_singleton);
 }
 
 fn appFrame() !dvui.App.Result {
@@ -78,7 +93,8 @@ fn appFrame() !dvui.App.Result {
 }
 
 fn frame(app: *branch.App) !dvui.App.Result {
-    try app.current_menu.drawWindow(app);
+    const current_menu = app.menu_stack.getLast();
+    try current_menu.drawWindow(app);
 
     return .ok;
 }

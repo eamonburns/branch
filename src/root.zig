@@ -4,10 +4,7 @@ const dvui = @import("dvui");
 pub const App = struct {
     gpa: std.mem.Allocator,
     frame_arena: std.heap.ArenaAllocator,
-    // TODO: This should be a "stack" of pointers to menus, and
-    // then there should be a "root" menu that starts out as the
-    // first "current menu" at the top of the stack
-    current_menu: Menu,
+    menu_stack: std.ArrayList(*Menu),
 };
 
 pub const Menu = struct {
@@ -15,7 +12,7 @@ pub const Menu = struct {
     items: std.ArrayList(Item) = .empty,
     should_focus_filter: bool = false,
 
-    const log = std.log.scoped(.@"branch/Menu");
+    const log = std.log.scoped(.@"branch.Menu");
 
     pub const init: Menu = .{};
 
@@ -37,7 +34,6 @@ pub const Menu = struct {
     }
 
     pub fn drawWindow(menu: *Menu, app: *App) !void {
-        _ = app;
         var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
             .expand = .both,
         });
@@ -59,7 +55,14 @@ pub const Menu = struct {
             break :blk input.textGet();
         } else "";
 
-        for (menu.items.items, 0..) |item, i| {
+        var item_widgets: std.ArrayList(struct {
+            item: *Item,
+            index: usize,
+            widget_id: dvui.Id,
+            widget_rect: dvui.Rect.Physical,
+        }) = .empty;
+        for (menu.items.items, 0..) |*item, i| {
+            // TODO: Fuzzy match and sort
             if (filter.len > 0 and !std.mem.containsAtLeast(u8, item.name, 1, filter)) continue;
 
             var item_box = dvui.box(@src(), .{ .dir = .vertical }, .{
@@ -69,6 +72,13 @@ pub const Menu = struct {
                 .border = .all(1),
             });
             defer item_box.deinit();
+
+            try item_widgets.append(app.frame_arena.allocator(), .{
+                .index = i,
+                .item = item,
+                .widget_id = item_box.data().id,
+                .widget_rect = item_box.data().borderRectScale().r,
+            });
 
             dvui.label(@src(), "name: {s}", .{item.name}, .{
                 .id_extra = i,
@@ -87,18 +97,67 @@ pub const Menu = struct {
         menu.should_focus_filter = false;
         const wd = dvui.currentWindow().data();
         for (dvui.events()) |*e| {
-            if (e.evt != .key or e.evt.key.action != .down) continue;
-            switch (e.evt.key.code) {
-                .slash => {
-                    menu.should_focus_filter = true;
-                    menu.show_filter = true;
+            switch (e.evt) {
+                .key => |key| {
+                    if (key.action != .down) continue;
+                    switch (key.code) {
+                        .slash => {
+                            menu.should_focus_filter = true;
+                            menu.show_filter = true;
+                        },
+                        .escape => if (menu.show_filter) {
+                            menu.show_filter = false;
+                        } else if (app.menu_stack.items.len > 1) {
+                            menu.should_focus_filter = false;
+                            menu.show_filter = false;
+                            _ = app.menu_stack.pop();
+                        },
+                        else => |key_code| for (item_widgets.items) |item_widget| {
+                            if (key_code != item_widget.item.key) continue;
+
+                            log.debug("clicked menu item {d}: {t}\n", .{ item_widget.index, item_widget.item.value });
+                            switch (item_widget.item.value) {
+                                .menu => |*next_menu| {
+                                    menu.should_focus_filter = false;
+                                    menu.show_filter = false;
+                                    try app.menu_stack.append(app.gpa, next_menu);
+                                },
+                                .none => {},
+                            }
+
+                            break;
+                        } else continue,
+                    }
+                    log.debug("key event: {t}", .{e.evt.key.code});
                 },
-                .escape => {
-                    menu.show_filter = false;
+                .mouse => |mouse| {
+                    if (mouse.button != .left or mouse.action != .press) continue;
+                    log.debug("mouse event point: {any}\n", .{mouse.p});
+                    for (item_widgets.items) |item_widget| {
+                        log.debug("widget {d} rect: {any}\n", .{ item_widget.index, item_widget.widget_rect });
+                        if (!dvui.eventMatch(e, .{
+                            .id = item_widget.widget_id,
+                            .r = item_widget.widget_rect,
+                            .debug = true,
+                        })) continue;
+
+                        log.debug("matched mouse event: {any}\n", .{mouse});
+
+                        log.debug("clicked menu item {d}: {t}\n", .{ item_widget.index, item_widget.item.value });
+                        switch (item_widget.item.value) {
+                            .menu => |*next_menu| {
+                                menu.should_focus_filter = false;
+                                menu.show_filter = false;
+                                try app.menu_stack.append(app.gpa, next_menu);
+                            },
+                            .none => {},
+                        }
+
+                        break;
+                    } else continue;
                 },
                 else => continue,
             }
-            log.debug("key event: {t}", .{e.evt.key.code});
             e.handle(@src(), wd);
         }
     }

@@ -51,26 +51,35 @@ local Menu = branch.Menu
 local App = branch.App
 
 return Menu {
-  name = "websites",
+  title = "Websites",
 
-  App {
+  Site {
     key = "s",
 
-    "https://search.example.com",
+    url = Form {
+      format = "https://search.example.com/?q=${query}",
+      fields = {
+        query = Field {
+          label = "Search Query",
+          type = "string",
+          modify = branch.modify.url_encode,
+        },
+      },
+    },
   },
   Menu {
-    name = "work",
+    title = "Work Sites",
     key = "w",
 
-    App { "https://intranet.company.com" },
-    App { "https://email.company.com" }
+    Site { url = "https://intranet.company.com" },
+    Site { url = "https://email.company.com" }
   },
   Menu {
-    name = "personal",
+    title = "Personal Sites",
     key = "p",
 
-    App { "https://videos.example.com" },
-    App { "https://pictures.example.com" },
+    Site { url = "https://videos.example.com" },
+    Site { url = "https://pictures.example.com" },
   },
 }
 ```
