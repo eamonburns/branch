@@ -70,6 +70,12 @@ fn appInit(win: *dvui.Window) !void {
         .value = .{ .menu = sub_menu },
     });
 
+    try root_menu.items.append(gpa_singleton, .{
+        .key = .g,
+        .name = "fourth",
+        .value = .{ .site = .{ .url = "https://google.com" } },
+    });
+
     var menu_stack: std.ArrayList(*branch.Menu) = .empty;
     try menu_stack.append(gpa_singleton, root_menu);
 
@@ -94,7 +100,6 @@ fn appFrame() !dvui.App.Result {
 
 fn frame(app: *branch.App) !dvui.App.Result {
     const current_menu = app.menu_stack.getLast();
-    try current_menu.drawWindow(app);
 
-    return .ok;
+    return current_menu.drawWindow(app);
 }

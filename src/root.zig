@@ -31,6 +31,7 @@ pub const Menu = struct {
         name: []const u8,
         value: union(enum) {
             menu: Menu,
+            site: Site,
             none, // NOTE: Placeholder
         },
     };
@@ -38,12 +39,13 @@ pub const Menu = struct {
     pub fn deinit(menu: *Menu, gpa: std.mem.Allocator) void {
         for (menu.items.items) |item| switch (item.value) {
             .menu => |*m| @constCast(m).deinit(gpa),
+            .site => {}, // TODO: I should probably make a `Site.init` and `Site.deinit`
             .none => {},
         };
         menu.items.deinit(gpa);
     }
 
-    pub fn drawWindow(menu: *Menu, app: *App) !void {
+    pub fn drawWindow(menu: *Menu, app: *App) !dvui.App.Result {
         var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
             .expand = .both,
         });
@@ -126,14 +128,9 @@ pub const Menu = struct {
                             if (key_code != item_widget.item.key) continue;
 
                             log.debug("clicked menu item {d}: {t}\n", .{ item_widget.index, item_widget.item.value });
-                            switch (item_widget.item.value) {
-                                .menu => |*next_menu| {
-                                    menu._state = .init;
-                                    try app.menu_stack.append(app.gpa, next_menu);
-                                },
-                                .none => {},
+                            if (try menu.selectItem(app, item_widget.item)) {
+                                return .close;
                             }
-
                             break;
                         } else continue,
                     }
@@ -146,18 +143,12 @@ pub const Menu = struct {
                         if (!dvui.eventMatch(e, .{
                             .id = item_widget.widget_id,
                             .r = item_widget.widget_rect,
-                            .debug = true,
                         })) continue;
 
                         log.debug("clicked menu item {d}: {t}\n", .{ item_widget.index, item_widget.item.value });
-                        switch (item_widget.item.value) {
-                            .menu => |*next_menu| {
-                                menu._state = .init;
-                                try app.menu_stack.append(app.gpa, next_menu);
-                            },
-                            .none => {},
+                        if (try menu.selectItem(app, item_widget.item)) {
+                            return .close;
                         }
-
                         break;
                     } else continue;
                 },
@@ -165,5 +156,38 @@ pub const Menu = struct {
             }
             e.handle(@src(), wd);
         }
+        return .ok;
+    }
+
+    /// Returns true if the app should close
+    pub fn selectItem(menu: *Menu, app: *App, item: *Item) !bool {
+        switch (item.value) {
+            .menu => |*next_menu| {
+                menu._state = .init;
+                try app.menu_stack.append(app.gpa, next_menu);
+            },
+            .site => |site| if (site.run()) {
+                return true;
+            } else {
+                return error.OpenSiteFailure;
+            },
+            .none => {},
+        }
+        return false;
+    }
+};
+
+pub const Site = struct {
+    url: []const u8,
+
+    const log = std.log.scoped(.@"branch.Site");
+
+    /// Returns true when the site was successfully opened,
+    /// false if there was a problem
+    pub fn run(site: Site) bool {
+        return dvui.openURL(.{
+            .new_window = false,
+            .url = site.url,
+        });
     }
 };
