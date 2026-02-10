@@ -47,46 +47,66 @@ fn appInit(win: *dvui.Window) !void {
         .value = .none,
     });
 
-    var sub_menu: branch.Menu = .init;
-    try sub_menu.items.append(gpa_singleton, .{
-        .key = .a,
-        .name = "alpha",
-        .value = .none,
-    });
-    try sub_menu.items.append(gpa_singleton, .{
-        .key = .b,
-        .name = "beta",
-        .value = .none,
-    });
+    {
+        const sub_menu = try gpa_singleton.create(branch.Menu);
+        sub_menu.* = .init;
+        try sub_menu.items.append(gpa_singleton, .{
+            .key = .a,
+            .name = "alpha",
+            .value = .none,
+        });
+        try sub_menu.items.append(gpa_singleton, .{
+            .key = .b,
+            .name = "beta",
+            .value = .none,
+        });
 
-    try root_menu.items.append(gpa_singleton, .{
-        .key = .t,
-        .name = "third",
-        .value = .{ .menu = sub_menu },
-    });
+        try root_menu.items.append(gpa_singleton, .{
+            .key = .t,
+            .name = "third",
+            .value = .{ .menu = sub_menu },
+        });
+    }
 
+    const fourth_site = try gpa_singleton.create(branch.Site);
+    fourth_site.* = .{ .url = "https://google.com" };
     try root_menu.items.append(gpa_singleton, .{
         .key = .g,
         .name = "fourth",
-        .value = .{ .site = .{ .url = "https://google.com" } },
+        .value = .{ .site = fourth_site },
     });
 
-    var menu_stack: std.ArrayList(*branch.Menu) = .empty;
-    try menu_stack.append(gpa_singleton, root_menu);
+    const site_form = try gpa_singleton.create(branch.SiteForm);
+    site_form.* = .{
+        .format = try gpa_singleton.dupe(u8, "https://search.brave.com/search?q=${query}"),
+        .fields = try .init(gpa_singleton, &.{
+            "query",
+        }, &.{.{
+            .label = "Search query",
+            .t = .string,
+            .modify = null,
+        }}),
+    };
+    try root_menu.items.append(gpa_singleton, .{
+        .key = .b,
+        .name = "brave",
+        .value = .{ .site_form = site_form },
+    });
+
+    var screen_stack: std.ArrayList(branch.Screen) = .empty;
+    try screen_stack.append(gpa_singleton, .{
+        .menu = root_menu,
+    });
 
     app_singleton = .{
         .gpa = gpa_singleton,
         .frame_arena = .init(gpa_singleton),
-        .menu_stack = menu_stack,
+        .screen_stack = screen_stack,
     };
 }
 
 fn appDeinit() void {
-    const root_menu = app_singleton.menu_stack.items[0];
-    root_menu.deinit(gpa_singleton);
-    gpa_singleton.destroy(root_menu);
-    app_singleton.menu_stack.deinit(gpa_singleton);
-    app_singleton.frame_arena.deinit();
+    app_singleton.deinit();
     _ = debug_allocator.deinit();
 }
 
@@ -96,7 +116,10 @@ fn appFrame() !dvui.App.Result {
 }
 
 fn frame(app: *branch.App) !dvui.App.Result {
-    const current_menu = app.menu_stack.getLast();
+    const current_screen = app.screen_stack.getLast();
 
-    return current_menu.drawWindow(app);
+    switch (current_screen) {
+        .menu => |m| return m.drawWindow(app),
+        .site_form => |sf| return sf.drawWindow(app),
+    }
 }

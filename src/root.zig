@@ -1,10 +1,28 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const dvui = @import("dvui");
 
 pub const App = struct {
-    gpa: std.mem.Allocator,
+    gpa: Allocator,
     frame_arena: std.heap.ArenaAllocator,
-    menu_stack: std.ArrayList(*Menu),
+    screen_stack: std.ArrayList(Screen),
+
+    pub fn deinit(app: *App) void {
+        const root_screen = app.screen_stack.items[0];
+        switch (root_screen) {
+            inline else => |s| {
+                s.deinit(app.gpa);
+                app.gpa.destroy(s);
+            },
+        }
+        app.screen_stack.deinit(app.gpa);
+        app.frame_arena.deinit();
+    }
+};
+
+pub const Screen = union(enum) {
+    menu: *Menu,
+    site_form: *SiteForm,
 };
 
 pub const Menu = struct {
@@ -30,16 +48,24 @@ pub const Menu = struct {
         key: ?dvui.enums.Key,
         name: []const u8,
         value: union(enum) {
-            menu: Menu,
-            site: Site,
+            menu: *Menu,
+            site: *Site,
+            site_form: *SiteForm,
             none, // NOTE: Placeholder
         },
     };
 
-    pub fn deinit(menu: *Menu, gpa: std.mem.Allocator) void {
+    pub fn deinit(menu: *Menu, gpa: Allocator) void {
         for (menu.items.items) |item| switch (item.value) {
-            .menu => |*m| @constCast(m).deinit(gpa),
-            .site => {}, // TODO: I should probably make a `Site.init` and `Site.deinit`
+            .menu => |m| {
+                defer gpa.destroy(m);
+                m.deinit(gpa);
+            },
+            .site_form => |sf| {
+                defer gpa.destroy(sf);
+                sf.deinit(gpa);
+            },
+            .site => |s| gpa.destroy(s), // TODO: I should make a `Site.init` and `Site.deinit`
             .none => {},
         };
         menu.items.deinit(gpa);
@@ -120,9 +146,9 @@ pub const Menu = struct {
                         },
                         .escape => if (menu._state.show_filter) {
                             menu._state.show_filter = false;
-                        } else if (app.menu_stack.items.len > 1) {
+                        } else if (app.screen_stack.items.len > 1) {
                             menu._state = .init;
-                            _ = app.menu_stack.pop();
+                            _ = app.screen_stack.pop();
                         },
                         else => |key_code| for (item_widgets.items) |item_widget| {
                             if (key_code != item_widget.item.key) continue;
@@ -162,9 +188,13 @@ pub const Menu = struct {
     /// Returns true if the app should close
     pub fn selectItem(menu: *Menu, app: *App, item: *Item) !bool {
         switch (item.value) {
-            .menu => |*next_menu| {
+            .menu => |next_menu| {
                 menu._state = .init;
-                try app.menu_stack.append(app.gpa, next_menu);
+                try app.screen_stack.append(app.gpa, .{ .menu = next_menu });
+            },
+            .site_form => |next_site_form| {
+                menu._state = .init;
+                try app.screen_stack.append(app.gpa, .{ .site_form = next_site_form });
             },
             .site => |site| if (site.run()) {
                 return true;
@@ -174,6 +204,25 @@ pub const Menu = struct {
             .none => {},
         }
         return false;
+    }
+};
+
+pub const FormFields = std.StringArrayHashMapUnmanaged(FormField);
+pub const FormField = struct {
+    label: []const u8,
+    t: Type,
+    modify: ?Modifier,
+
+    pub const Type = enum { string, integer };
+    pub const Modifier = *const fn ([]const u8) []const u8;
+
+    pub const Values = []struct {
+        id: []const u8,
+        value: []const u8,
+    };
+
+    pub fn allocValues(gpa: Allocator, n: usize) Allocator.Error!Values {
+        return gpa.alloc(@typeInfo(Values).pointer.child, n);
     }
 };
 
@@ -189,5 +238,103 @@ pub const Site = struct {
             .new_window = false,
             .url = site.url,
         });
+    }
+};
+
+/// Asserts that `format` is valid and contains only placeholders contained in `values`.
+/// Caller owns returned memory
+fn formatFields(gpa: Allocator, format: []const u8, values: FormField.Values) ![]const u8 {
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    const w = &aw.writer;
+
+    var chunk_start: usize = 0;
+    while (std.mem.indexOfPos(u8, format, chunk_start, "${")) |idx| {
+        try w.writeAll(format[chunk_start..idx]);
+        const id_start = idx + 2;
+        const id_end = std.mem.indexOfPos(u8, format, id_start, "}") orelse unreachable; // There must by a matching closing '}'
+        const id = format[id_start..id_end];
+
+        for (values) |value| {
+            if (std.mem.eql(u8, value.id, id)) {
+                try w.writeAll(value.value);
+                break;
+            }
+        } else unreachable; // Format placeholder with the given id was not found
+
+        chunk_start = id_end + 1;
+    }
+    try w.writeAll(format[chunk_start..]);
+
+    return aw.toOwnedSlice();
+}
+
+pub const SiteForm = struct {
+    format: []const u8,
+    fields: FormFields,
+
+    const log = std.log.scoped(.@"branch.SiteForm");
+
+    pub fn drawWindow(form: *SiteForm, app: *App) !dvui.App.Result {
+        var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
+            .expand = .both,
+        });
+        defer vbox.deinit();
+
+        var field_values = try FormField.allocValues(
+            app.frame_arena.allocator(),
+            form.fields.entries.len,
+        );
+        var enter_pressed = false;
+        var it = form.fields.iterator();
+        var i: usize = 0;
+        while (it.next()) |entry| : (i += 1) {
+            dvui.labelNoFmt(@src(), entry.value_ptr.label, .{}, .{});
+            const field = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
+            defer field.deinit();
+
+            enter_pressed = enter_pressed or field.enter_pressed;
+            field_values[i] = .{
+                .id = entry.key_ptr.*,
+                .value = field.textGet(),
+            };
+        }
+
+        if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
+            const formatted_url = try formatFields(app.gpa, form.format, field_values);
+            const site: Site = .{
+                .url = formatted_url,
+            };
+            if (site.run()) {
+                return .close;
+            } else {
+                return error.OpenSiteFailure;
+            }
+        }
+
+        const wd = dvui.currentWindow().data();
+        events: for (dvui.events()) |*e| {
+            switch (e.evt) {
+                .key => |key| {
+                    if (key.action != .down) continue :events;
+                    switch (key.code) {
+                        .escape => if (app.screen_stack.items.len > 1) {
+                            _ = app.screen_stack.pop();
+                        },
+                        else => continue,
+                    }
+                    log.debug("key event: {t}", .{e.evt.key.code});
+                },
+                else => continue :events,
+            }
+            e.handle(@src(), wd);
+        }
+
+        return .ok;
+    }
+
+    pub fn deinit(form: *SiteForm, gpa: Allocator) void {
+        gpa.free(form.format);
+        form.fields.deinit(gpa);
     }
 };
