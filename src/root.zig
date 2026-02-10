@@ -302,6 +302,7 @@ pub const SiteForm = struct {
 
         if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
             const formatted_url = try formatFields(app.gpa, form.format, field_values);
+            defer app.gpa.free(formatted_url);
             const site: Site = .{
                 .url = formatted_url,
             };
