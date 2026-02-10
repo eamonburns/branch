@@ -6,14 +6,9 @@ const branch = @import("branch");
 pub const dvui_app: dvui.App = .{
     .config = .{
         .options = .{
+            .title = "Branch",
             .size = .{ .w = 800.0, .h = 600.0 },
             .min_size = .{ .w = 250.0, .h = 350.0 },
-            .title = "Branch",
-            // .icon = window_icon_png,
-            .window_init_options = .{
-                // Could set a default theme here
-                // .theme = dvui.Theme.builtin.adwaita_dark,
-            },
         },
     },
     .initFn = appInit,
@@ -87,10 +82,12 @@ fn appInit(win: *dvui.Window) !void {
 }
 
 fn appDeinit() void {
-    _ = debug_allocator.deinit();
-    app_singleton.frame_arena.deinit();
     const root_menu = app_singleton.menu_stack.items[0];
     root_menu.deinit(gpa_singleton);
+    gpa_singleton.destroy(root_menu);
+    app_singleton.menu_stack.deinit(gpa_singleton);
+    app_singleton.frame_arena.deinit();
+    _ = debug_allocator.deinit();
 }
 
 fn appFrame() !dvui.App.Result {
