@@ -69,7 +69,7 @@ fn appInit(win: *dvui.Window) !void {
     }
 
     const fourth_site = try gpa_singleton.create(branch.Site);
-    fourth_site.* = .{ .url = "https://google.com" };
+    fourth_site.* = try .init(gpa_singleton, "https://google.com");
     try root_menu.items.append(gpa_singleton, .{
         .key = .g,
         .name = "fourth",
@@ -77,16 +77,17 @@ fn appInit(win: *dvui.Window) !void {
     });
 
     const site_form = try gpa_singleton.create(branch.SiteForm);
-    site_form.* = .{
-        .format = try gpa_singleton.dupe(u8, "https://search.brave.com/search?q=${query}"),
-        .fields = try .init(gpa_singleton, &.{
+    site_form.* = try .init(
+        gpa_singleton,
+        "https://search.brave.com/search?q=${query}",
+        try .init(gpa_singleton, &.{
             "query",
         }, &.{.{
             .label = "Search query",
             .t = .string,
             .modify = null,
         }}),
-    };
+    );
     try root_menu.items.append(gpa_singleton, .{
         .key = .b,
         .name = "brave",

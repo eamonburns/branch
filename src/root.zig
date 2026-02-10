@@ -65,7 +65,10 @@ pub const Menu = struct {
                 defer gpa.destroy(sf);
                 sf.deinit(gpa);
             },
-            .site => |s| gpa.destroy(s), // TODO: I should make a `Site.init` and `Site.deinit`
+            .site => |s| {
+                defer gpa.destroy(s);
+                s.deinit(gpa);
+            },
             .none => {},
         };
         menu.items.deinit(gpa);
@@ -231,6 +234,15 @@ pub const Site = struct {
 
     const log = std.log.scoped(.@"branch.Site");
 
+    pub fn init(gpa: Allocator, url: []const u8) Allocator.Error!Site {
+        return .{
+            .url = try gpa.dupe(u8, url),
+        };
+    }
+    pub fn deinit(site: Site, gpa: Allocator) void {
+        gpa.free(site.url);
+    }
+
     /// Returns true when the site was successfully opened,
     /// false if there was a problem
     pub fn run(site: Site) bool {
@@ -275,14 +287,26 @@ pub const SiteForm = struct {
 
     const log = std.log.scoped(.@"branch.SiteForm");
 
+    pub fn init(gpa: Allocator, format: []const u8, fields: FormFields) Allocator.Error!SiteForm {
+        return .{
+            .format = try gpa.dupe(u8, format),
+            .fields = fields,
+        };
+    }
+    pub fn deinit(form: *SiteForm, gpa: Allocator) void {
+        gpa.free(form.format);
+        form.fields.deinit(gpa);
+    }
+
     pub fn drawWindow(form: *SiteForm, app: *App) !dvui.App.Result {
+        const arena = app.frame_arena.allocator();
         var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
             .expand = .both,
         });
         defer vbox.deinit();
 
         var field_values = try FormField.allocValues(
-            app.frame_arena.allocator(),
+            arena,
             form.fields.entries.len,
         );
         var enter_pressed = false;
@@ -301,8 +325,7 @@ pub const SiteForm = struct {
         }
 
         if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
-            const formatted_url = try formatFields(app.gpa, form.format, field_values);
-            defer app.gpa.free(formatted_url);
+            const formatted_url = try formatFields(arena, form.format, field_values);
             const site: Site = .{
                 .url = formatted_url,
             };
@@ -332,10 +355,5 @@ pub const SiteForm = struct {
         }
 
         return .ok;
-    }
-
-    pub fn deinit(form: *SiteForm, gpa: Allocator) void {
-        gpa.free(form.format);
-        form.fields.deinit(gpa);
     }
 };
