@@ -31,6 +31,9 @@ var warn_on_quit = false;
 var warn_on_quit_closing = false;
 
 fn appInit(win: *dvui.Window) !void {
+    // var it: std.process.ArgIterator = try .initWithAllocator(gpa_singleton);
+    // _ = it.skip();
+    _ = try branch.screenFromLuaScript(gpa_singleton, "print('hi') error('oh no!')");
     orig_content_scale = win.content_scale;
 
     const root_menu = try gpa_singleton.create(branch.Menu);

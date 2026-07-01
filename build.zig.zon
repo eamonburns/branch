@@ -8,6 +8,10 @@
             .url = "https://github.com/david-vanderson/dvui/archive/c8759e66e0a6081dc67381bd7e5615da25c8aed4.tar.gz",
             .hash = "dvui-0.4.0-dev-AQFJmY372gCzFnHrszjjIoYJW7wSYjmAr8CCWy562PDj",
         },
+        .zlua = .{
+            .url = "https://github.com/natecraddock/ziglua/archive/0.6.0.tar.gz",
+            .hash = "zlua-0.1.0-hGRpCww-BQCx3cX6zbKWfTgOx6B7Peo4P17RK2hm7-xV",
+        },
     },
     .paths = .{
         "build.zig",

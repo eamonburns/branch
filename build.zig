@@ -5,12 +5,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const dvui_dep = b.dependency("dvui", .{ .target = target, .optimize = optimize, .backend = .sdl3 });
+    const zlua_dep = b.dependency("zlua", .{});
 
     const mod = b.addModule("branch", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .imports = &.{
             .{ .name = "dvui", .module = dvui_dep.module("dvui_sdl3") },
+            .{ .name = "zlua", .module = zlua_dep.module("zlua") },
         },
     });
 
