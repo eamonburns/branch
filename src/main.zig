@@ -1,7 +1,10 @@
 const std = @import("std");
 const dvui = @import("dvui");
+const zlua = @import("zlua");
 
 const branch = @import("branch");
+
+const lua_bindings = @import("lua_bindings.zig");
 
 pub const dvui_app: dvui.App = .{
     .config = .{
@@ -94,6 +97,23 @@ fn appInit(win: *dvui.Window) !void {
         .value = .{ .site_form = site_form },
     });
 
+    const lua: *zlua.Lua = try .init(gpa_singleton);
+    lua.openLibs();
+    lua_bindings.register(lua);
+    lua.doString(@embedFile("branch.lua")) catch |err| {
+        std.log.err("{!s}", .{lua.toString(-1)});
+        return err;
+    };
+
+    lua.doFile("site.lua") catch |err| {
+        std.log.err("{!s}", .{lua.toString(-1)});
+        return err;
+    };
+    const lua_site = lua.toUserdata(branch.Menu.Item, -1) catch {
+        return error.NotUserdata;
+    };
+    try root_menu.items.append(gpa_singleton, lua_site.*);
+
     var screen_stack: std.ArrayList(branch.Screen) = .empty;
     try screen_stack.append(gpa_singleton, .{
         .menu = root_menu,
@@ -103,6 +123,7 @@ fn appInit(win: *dvui.Window) !void {
         .gpa = gpa_singleton,
         .frame_arena = .init(gpa_singleton),
         .screen_stack = screen_stack,
+        .lua = lua,
     };
 }
 
