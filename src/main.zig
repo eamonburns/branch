@@ -36,66 +36,12 @@ var warn_on_quit_closing = false;
 fn appInit(win: *dvui.Window) !void {
     orig_content_scale = win.content_scale;
 
+    // HACK: This is just a temporary menu so that we can do root_menu.selectItem
+    // I think I want to make `selectItem` "owned" by the items themselves, so
+    // that you can do `item.select(app)` or maybe `app.select(item)`
     const root_menu = try gpa_singleton.create(branch.Menu);
     root_menu.* = .init;
-
-    try root_menu.items.append(gpa_singleton, .{
-        .key = .f,
-        .name = "first",
-        .value = .none,
-    });
-    try root_menu.items.append(gpa_singleton, .{
-        .key = .s,
-        .name = "second",
-        .value = .none,
-    });
-
-    {
-        const sub_menu = try gpa_singleton.create(branch.Menu);
-        sub_menu.* = .init;
-        try sub_menu.items.append(gpa_singleton, .{
-            .key = .a,
-            .name = "alpha",
-            .value = .none,
-        });
-        try sub_menu.items.append(gpa_singleton, .{
-            .key = .b,
-            .name = "beta",
-            .value = .none,
-        });
-
-        try root_menu.items.append(gpa_singleton, .{
-            .key = .t,
-            .name = "third",
-            .value = .{ .menu = sub_menu },
-        });
-    }
-
-    const fourth_site = try gpa_singleton.create(branch.Site);
-    fourth_site.* = try .init(gpa_singleton, "https://google.com");
-    try root_menu.items.append(gpa_singleton, .{
-        .key = .g,
-        .name = "fourth",
-        .value = .{ .site = fourth_site },
-    });
-
-    const site_form = try gpa_singleton.create(branch.SiteForm);
-    site_form.* = try .init(
-        gpa_singleton,
-        "https://search.brave.com/search?q=${query}",
-        try .init(gpa_singleton, &.{
-            "query",
-        }, &.{.{
-            .label = "Search query",
-            .t = .string,
-            .modify = null,
-        }}),
-    );
-    try root_menu.items.append(gpa_singleton, .{
-        .key = .b,
-        .name = "brave",
-        .value = .{ .site_form = site_form },
-    });
+    defer gpa_singleton.destroy(root_menu);
 
     const lua: *zlua.Lua = try .init(gpa_singleton);
     lua.openLibs();
@@ -113,19 +59,16 @@ fn appInit(win: *dvui.Window) !void {
     const lua_site = lua.toUserdata(branch.Menu.Item, -1) catch {
         return error.NotUserdata;
     };
-    try root_menu.items.append(gpa_singleton, lua_site.*);
-
-    var screen_stack: std.ArrayList(branch.Screen) = .empty;
-    try screen_stack.append(gpa_singleton, .{
-        .menu = root_menu,
-    });
 
     app_singleton = .{
         .gpa = gpa_singleton,
         .frame_arena = .init(gpa_singleton),
-        .screen_stack = screen_stack,
+        .screen_stack = .empty,
         .lua = lua,
     };
+    if (try root_menu.selectItem(&app_singleton, lua_site)) {
+        return error.ShouldClose;
+    }
 }
 
 fn appDeinit() void {

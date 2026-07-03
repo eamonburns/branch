@@ -217,7 +217,8 @@ pub const Menu = struct {
                 }
 
                 app.lua.protectedCall(.{}) catch {
-                    log.err("lua call failed: {s}", .{app.lua.toString(-1) catch |err| @errorName(err)});
+                    log.err("lua call failed: {!s}", .{app.lua.toString(-1)});
+                    return false;
                 };
                 return true;
             },

@@ -2,6 +2,7 @@
     "diagnostics.globals": [
         "branch",
         "_branch_new_item",
-        "_branch_new_menu"
+        "_branch_new_menu",
+        "_branch_new_none"
     ]
 }
