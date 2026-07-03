@@ -12,6 +12,7 @@ pub var gpa_singleton: std.mem.Allocator = undefined;
 pub fn register(lua: *Lua) void {
     lua.register("_branch_new_item", new_item);
     lua.register("_branch_new_menu", new_menu);
+    lua.register("_branch_new_none", new_none);
 }
 
 fn new_item(l: ?*zlua.LuaState) callconv(.c) c_int {
@@ -71,6 +72,27 @@ fn new_menu(l: ?*zlua.LuaState) callconv(.c) c_int {
         .name = name,
         .key = key,
         .value = .{ .menu = menu },
+    };
+    return 1;
+}
+fn new_none(l: ?*zlua.LuaState) callconv(.c) c_int {
+    const lua: *Lua = if (l) |lua| @ptrCast(lua) else return 0;
+
+    if (lua.getTop() != 2) {
+        return lua.raiseErrorStr("expected 2 arguments, but found %d", .{lua.getTop()});
+    }
+    const name = lua.checkString(1);
+    const key = if (lua.optString(2)) |key_str| blk: {
+        break :blk std.meta.stringToEnum(dvui.enums.Key, key_str) orelse {
+            return lua.argError(2, "invalid key name");
+        };
+    } else null;
+
+    const item = lua.newUserdata(Item);
+    item.* = .{
+        .name = name,
+        .key = key,
+        .value = .none,
     };
     return 1;
 }

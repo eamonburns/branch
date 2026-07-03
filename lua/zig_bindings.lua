@@ -15,3 +15,10 @@ end
 function _branch_new_menu(name, key, ...) ---@diagnostic disable-line: unused-local,unused-vararg
 	error("_branch_new_menu should be defined by host")
 end
+
+---@param name string # Display name
+---@param key? string # Key to activate item
+---@return branch.Item
+function _branch_new_none(name, key) ---@diagnostic disable-line: unused-local
+	error("_branch_new_none should be defined by host")
+end

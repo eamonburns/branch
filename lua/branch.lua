@@ -44,4 +44,18 @@ function branch.Menu(opts)
 	return _branch_new_menu(title, opts.key, unpack(opts))
 end
 
+---@param opts { name: string, key?: string }
+---@return branch.Item
+function branch.None(opts)
+	if type(opts) ~= "table" then
+		error("Menu: opts is not a table", 2)
+	end
+
+	local name = opts.name
+	if type(name) ~= "string" then
+		error("None: opts.name is not a string", 2)
+	end
+
+	return _branch_new_none(name, opts.key)
+end
 _G.branch = branch
