@@ -163,7 +163,7 @@ pub const Menu = struct {
                         else => |key_code| for (item_widgets.items) |item_widget| {
                             if (key_code != item_widget.item.key) continue;
 
-                            log.debug("clicked menu item {d}: {t}\n", .{ item_widget.index, item_widget.item.value });
+                            log.debug("clicked menu item {d}: {t}", .{ item_widget.index, item_widget.item.value });
                             if (try menu.selectItem(app, item_widget.item)) {
                                 return .close;
                             }
@@ -175,13 +175,13 @@ pub const Menu = struct {
                 .mouse => |mouse| {
                     if (mouse.button != .left or mouse.action != .press) continue :events;
                     for (item_widgets.items) |item_widget| {
-                        log.debug("widget {d} rect: {any}\n", .{ item_widget.index, item_widget.widget_rect });
+                        log.debug("widget {d} rect: {any}", .{ item_widget.index, item_widget.widget_rect });
                         if (!dvui.eventMatch(e, .{
                             .id = item_widget.widget_id,
                             .r = item_widget.widget_rect,
                         })) continue;
 
-                        log.debug("clicked menu item {d}: {t}\n", .{ item_widget.index, item_widget.item.value });
+                        log.debug("clicked menu item {d}: {t}", .{ item_widget.index, item_widget.item.value });
                         if (try menu.selectItem(app, item_widget.item)) {
                             return .close;
                         }
