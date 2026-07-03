@@ -99,6 +99,7 @@ fn appInit(win: *dvui.Window) !void {
 
     const lua: *zlua.Lua = try .init(gpa_singleton);
     lua.openLibs();
+    lua_bindings.gpa_singleton = gpa_singleton;
     lua_bindings.register(lua);
     lua.doString(@embedFile("branch.lua")) catch |err| {
         std.log.err("{!s}", .{lua.toString(-1)});

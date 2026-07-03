@@ -37,7 +37,11 @@ function branch.Menu(opts)
 		error("Menu: opts.title is not a string", 2)
 	end
 
-	return _branch_new_menu(title, opts.key, table.unpack(opts))
+	if not opts[1] then
+		error("Menu: no menu items", 2)
+	end
+
+	return _branch_new_menu(title, opts.key, unpack(opts))
 end
 
 _G.branch = branch
