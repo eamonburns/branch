@@ -6,11 +6,18 @@ pub fn build(b: *std.Build) void {
 
     const dvui_dep = b.dependency("dvui", .{ .target = target, .optimize = optimize, .backend = .sdl3 });
 
+    const zlua_dep = b.dependency("zlua", .{
+        .target = target,
+        .optimize = optimize,
+        .lang = .luajit,
+    });
+
     const mod = b.addModule("branch", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .imports = &.{
             .{ .name = "dvui", .module = dvui_dep.module("dvui_sdl3") },
+            .{ .name = "zlua", .module = zlua_dep.module("zlua") },
         },
     });
 
@@ -23,8 +30,12 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "branch", .module = mod },
                 .{ .name = "dvui", .module = dvui_dep.module("dvui_sdl3") },
+                .{ .name = "zlua", .module = zlua_dep.module("zlua") },
             },
         }),
+    });
+    exe.root_module.addAnonymousImport("branch.lua", .{
+        .root_source_file = b.path("lua/branch.lua"),
     });
 
     b.installArtifact(exe);

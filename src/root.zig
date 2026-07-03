@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const dvui = @import("dvui");
+const zlua = @import("zlua");
 
 pub const App = struct {
     gpa: Allocator,
     frame_arena: std.heap.ArenaAllocator,
     screen_stack: std.ArrayList(Screen),
+    lua: *zlua.Lua,
 
     pub fn deinit(app: *App) void {
         const root_screen = app.screen_stack.items[0];
@@ -17,6 +19,7 @@ pub const App = struct {
         }
         app.screen_stack.deinit(app.gpa);
         app.frame_arena.deinit();
+        app.lua.deinit();
     }
 };
 
@@ -49,6 +52,7 @@ pub const Menu = struct {
         name: []const u8,
         value: union(enum) {
             menu: *Menu,
+            lua_func: i32,
             site: *Site,
             site_form: *SiteForm,
             none, // NOTE: Placeholder
@@ -68,6 +72,9 @@ pub const Menu = struct {
             .site => |s| {
                 defer gpa.destroy(s);
                 s.deinit(gpa);
+            },
+            .lua_func => {
+                // TODO: Lua.unref
             },
             .none => {},
         };
@@ -203,6 +210,16 @@ pub const Menu = struct {
                 return true;
             } else {
                 return error.OpenSiteFailure;
+            },
+            .lua_func => |f| {
+                if (app.lua.rawGetIndex(zlua.registry_index, f) != .function) {
+                    return error.InvalidLuaFunction;
+                }
+
+                app.lua.protectedCall(.{}) catch {
+                    log.err("lua call failed: {s}", .{app.lua.toString(-1) catch |err| @errorName(err)});
+                };
+                return true;
             },
             .none => {},
         }
