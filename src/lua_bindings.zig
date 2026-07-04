@@ -54,16 +54,22 @@ fn new_menu(l: ?*zlua.LuaState) callconv(.c) c_int {
         };
     } else null;
 
-    const items = gpa_singleton.alloc(Item, @intCast(lua.getTop() - 2)) catch @panic("TODO: Handle this");
+    const items = gpa_singleton.alloc(Item, @intCast(lua.getTop() - 2)) catch {
+        return lua.raiseErrorStr("OOM", .{});
+    };
 
     for (0..@intCast(lua.getTop() - 2)) |i| {
         const idx: i32 = @intCast(i + 3);
 
-        const item = lua.toUserdata(Item, idx) catch @panic("todo: handle this");
+        const item = lua.toUserdata(Item, idx) catch {
+            return lua.raiseErrorStr("argument %d is not a userdata", .{idx});
+        };
         items[i] = item.*;
     }
 
-    const menu = gpa_singleton.create(branch.Menu) catch @panic("todo: handle this");
+    const menu = gpa_singleton.create(branch.Menu) catch {
+        return lua.raiseErrorStr("OOM", .{});
+    };
     menu.* = .{
         .items = .fromOwnedSlice(items),
     };
