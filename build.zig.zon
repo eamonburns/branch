@@ -2,15 +2,15 @@
     .name = .branch,
     .version = "0.0.0",
     .fingerprint = 0xbb861b1f6e7bbda0, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .dvui = .{
-            .url = "https://github.com/david-vanderson/dvui/archive/c8759e66e0a6081dc67381bd7e5615da25c8aed4.tar.gz",
-            .hash = "dvui-0.4.0-dev-AQFJmY372gCzFnHrszjjIoYJW7wSYjmAr8CCWy562PDj",
+            .url = "https://github.com/david-vanderson/dvui/archive/3d2555337261743637f50375b2ac7bb1cf6b0510.tar.gz",
+            .hash = "dvui-0.5.0-dev-AQFJmV1i-gBHqte8mSi-IOJu02dp7b8ZNIDPKEpWMt7-",
         },
         .zlua = .{
-            .url = "https://github.com/natecraddock/ziglua/archive/refs/tags/0.6.0.tar.gz",
-            .hash = "zlua-0.1.0-hGRpCww-BQCx3cX6zbKWfTgOx6B7Peo4P17RK2hm7-xV",
+            .url = "https://github.com/natecraddock/ziglua/archive/9a520d0bbaac378d2e926c76edb584da104941dc.tar.gz",
+            .hash = "zlua-0.1.0-hGRpCwGVBQCZRZ2QEHLENoYjRj-nNjD500_BmMsXeqT4",
         },
     },
     .paths = .{

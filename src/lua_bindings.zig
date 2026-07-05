@@ -28,7 +28,7 @@ fn new_item(l: ?*zlua.LuaState) callconv(.c) c_int {
         };
     } else null;
     lua.argCheck(lua.isFunction(3), 3, "expected function");
-    const activate = lua.ref(zlua.registry_index) catch unreachable;
+    const activate = lua.ref(zlua.registry_index);
 
     const item = lua.newUserdata(Item);
     item.* = .{
