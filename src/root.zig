@@ -212,7 +212,7 @@ pub const Menu = struct {
                 return error.OpenSiteFailure;
             },
             .lua_func => |f| {
-                if (app.lua.rawGetIndex(zlua.registry_index, f) != .function) {
+                if (app.lua.getIndexRaw(zlua.registry_index, f) != .function) {
                     return error.InvalidLuaFunction;
                 }
 
