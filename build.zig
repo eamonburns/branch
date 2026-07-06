@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) void {
             .{ .name = "zlua", .module = zlua_dep.module("zlua") },
         },
     });
+    mod.addAnonymousImport("branch.lua", .{
+        .root_source_file = b.path("lua/branch.lua"),
+    });
 
     const exe = b.addExecutable(.{
         .name = "branch",
@@ -33,9 +36,6 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "zlua", .module = zlua_dep.module("zlua") },
             },
         }),
-    });
-    exe.root_module.addAnonymousImport("branch.lua", .{
-        .root_source_file = b.path("lua/branch.lua"),
     });
 
     b.installArtifact(exe);

@@ -3,7 +3,7 @@ const dvui = @import("dvui");
 const zlua = @import("zlua");
 const Lua = zlua.Lua;
 
-const branch = @import("branch");
+const branch = @import("root.zig");
 const Item = branch.Menu.Item;
 
 // HACK: How can I do this properly?

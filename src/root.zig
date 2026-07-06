@@ -1,12 +1,58 @@
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const dvui = @import("dvui");
 const zlua = @import("zlua");
 
+const lua_bindings = @import("lua_bindings.zig");
+
 pub const App = struct {
+    io: Io,
     gpa: Allocator,
     screen_stack: std.ArrayList(Screen),
     lua: *zlua.Lua,
+
+    should_close: bool,
+
+    pub fn init(io: Io, gpa: Allocator, script_file: [:0]const u8) !App {
+        // HACK: This is just a temporary menu so that we can do root_menu.selectItem
+        // I think I want to make `selectItem` "owned" by the items themselves, so
+        // that you can do `item.select(app)` or maybe `app.select(item)`
+        const root_menu = try gpa.create(Menu);
+        root_menu.* = .init;
+        defer gpa.destroy(root_menu);
+
+        const lua: *zlua.Lua = try .init(gpa);
+        lua.openLibs();
+        lua_bindings.gpa_singleton = gpa;
+        lua_bindings.register(lua);
+        lua.doString(@embedFile("branch.lua")) catch |err| {
+            std.log.err("{!s}", .{lua.toString(-1)});
+            return err;
+        };
+
+        lua.doFile(script_file) catch |err| {
+            std.log.err("{!s}", .{lua.toString(-1)});
+            return err;
+        };
+        const lua_site = lua.toUserdata(Menu.Item, -1) catch {
+            return error.NotUserdata;
+        };
+
+        var app: App = .{
+            .io = io,
+            .gpa = gpa,
+            .screen_stack = .empty,
+            .lua = lua,
+            .should_close = false,
+        };
+
+        if (try root_menu.selectItem(&app, lua_site)) {
+            app.should_close = true;
+        }
+
+        return app;
+    }
 
     pub fn deinit(app: *App) void {
         const root_screen = app.screen_stack.items[0];
@@ -18,6 +64,17 @@ pub const App = struct {
         }
         app.screen_stack.deinit(app.gpa);
         app.lua.deinit();
+    }
+
+    pub fn frame(app: *App) !dvui.App.Result {
+        if (app.should_close) return .close;
+
+        const current_screen = app.screen_stack.getLast();
+
+        switch (current_screen) {
+            .menu => |m| return m.drawWindow(app),
+            .site_form => |sf| return sf.drawWindow(app),
+        }
     }
 };
 
