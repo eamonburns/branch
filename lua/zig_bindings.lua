@@ -2,7 +2,7 @@
 
 ---@param name string # Display name
 ---@param key? string # Key to activate item
----@param activate fun(): boolean, string # Function to be called when activated
+---@param activate fun() # Function to be called when activated
 ---@return branch.Item
 function _branch_new_item(name, key, activate) ---@diagnostic disable-line: unused-local
 	error("_branch_new_item should be defined by host")
@@ -21,4 +21,9 @@ end
 ---@return branch.Item
 function _branch_new_none(name, key) ---@diagnostic disable-line: unused-local
 	error("_branch_new_none should be defined by host")
+end
+
+---@param url string # URL to open
+function _branch_open_url(url) ---@diagnostic disable-line: unused-local
+	error("_branch_open_url should be defined by host")
 end

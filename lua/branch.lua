@@ -21,7 +21,7 @@ function branch.Site(opts)
 	}
 
 	return _branch_new_item(opts.name or url, opts.key, function()
-		error(("TODO: open external website: %s"):format(self.url))
+		_branch_open_url(self.url)
 	end)
 end
 
