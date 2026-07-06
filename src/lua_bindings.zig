@@ -7,7 +7,7 @@ const branch = @import("branch");
 const Item = branch.Menu.Item;
 
 // HACK: How can I do this properly?
-pub var gpa_singleton: std.mem.Allocator = undefined;
+pub var gpa_singleton: std.mem.Allocator = .failing;
 
 pub fn register(lua: *Lua) void {
     lua.register("_branch_new_item", new_item);

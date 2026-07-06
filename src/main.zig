@@ -62,7 +62,6 @@ fn appInit(win: *dvui.Window) !void {
 
     app_singleton = .{
         .gpa = gpa_singleton,
-        .frame_arena = .init(gpa_singleton),
         .screen_stack = .empty,
         .lua = lua,
     };

@@ -5,7 +5,6 @@ const zlua = @import("zlua");
 
 pub const App = struct {
     gpa: Allocator,
-    frame_arena: std.heap.ArenaAllocator,
     screen_stack: std.ArrayList(Screen),
     lua: *zlua.Lua,
 
@@ -18,7 +17,6 @@ pub const App = struct {
             },
         }
         app.screen_stack.deinit(app.gpa);
-        app.frame_arena.deinit();
         app.lua.deinit();
     }
 };
@@ -121,7 +119,7 @@ pub const Menu = struct {
             });
             defer item_box.deinit();
 
-            try item_widgets.append(app.frame_arena.allocator(), .{
+            try item_widgets.append(dvui.currentWindow().arena(), .{
                 .index = i,
                 .item = item,
                 .widget_id = item_box.data().id,
@@ -317,7 +315,7 @@ pub const SiteForm = struct {
     }
 
     pub fn drawWindow(form: *SiteForm, app: *App) !dvui.App.Result {
-        const arena = app.frame_arena.allocator();
+        const arena = dvui.currentWindow().arena();
         var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
             .expand = .both,
         });
