@@ -15,13 +15,7 @@ pub const App = struct {
     should_close: bool,
 
     pub fn init(io: Io, gpa: Allocator, script_file: [:0]const u8) !App {
-        // HACK: This is just a temporary menu so that we can do root_menu.selectItem
-        // I think I want to make `selectItem` "owned" by the items themselves, so
-        // that you can do `item.select(app)` or maybe `app.select(item)`
-        const root_menu = try gpa.create(Menu);
-        root_menu.* = .init;
-        defer gpa.destroy(root_menu);
-
+        // === Initialize Lua === //
         const lua: *zlua.Lua = try .init(gpa);
         lua.openLibs();
         lua_bindings.gpa_singleton = gpa;
@@ -39,6 +33,7 @@ pub const App = struct {
             return error.NotUserdata;
         };
 
+        // === Create app === //
         var app: App = .{
             .io = io,
             .gpa = gpa,
@@ -47,7 +42,7 @@ pub const App = struct {
             .should_close = false,
         };
 
-        if (try root_menu.selectItem(&app, lua_site)) {
+        if (try lua_site.activate(&app)) {
             app.should_close = true;
         }
 
@@ -112,6 +107,43 @@ pub const Menu = struct {
             site_form: *SiteForm,
             none, // NOTE: Placeholder
         },
+
+        /// Returns true if the app should close
+        pub fn activate(self: Item, app: *App) !bool {
+            switch (self.value) {
+                .menu => |next_menu| {
+                    if (app.screen_stack.getLastOrNull()) |current_screen| {
+                        current_screen.menu._state = .init;
+                    }
+                    try app.screen_stack.append(app.gpa, .{ .menu = next_menu });
+                    return false;
+                },
+                .site_form => |next_site_form| {
+                    if (app.screen_stack.getLastOrNull()) |current_screen| {
+                        current_screen.menu._state = .init;
+                    }
+                    try app.screen_stack.append(app.gpa, .{ .site_form = next_site_form });
+                    return false;
+                },
+                .site => |site| if (site.run()) {
+                    return true;
+                } else {
+                    return error.OpenSiteFailure;
+                },
+                .lua_func => |f| {
+                    if (app.lua.getIndexRaw(zlua.registry_index, f) != .function) {
+                        return error.InvalidLuaFunction;
+                    }
+
+                    app.lua.protectedCall(.{}) catch {
+                        log.err("lua call failed: {!s}", .{app.lua.toString(-1)});
+                        return false;
+                    };
+                    return true;
+                },
+                .none => return false,
+            }
+        }
     };
 
     pub fn deinit(menu: *Menu, gpa: Allocator) void {
@@ -219,7 +251,7 @@ pub const Menu = struct {
                             if (key_code != item_widget.item.key) continue;
 
                             log.debug("clicked menu item {d}: {t}", .{ item_widget.index, item_widget.item.value });
-                            if (try menu.selectItem(app, item_widget.item)) {
+                            if (try item_widget.item.activate(app)) {
                                 return .close;
                             }
                             break;
@@ -237,7 +269,7 @@ pub const Menu = struct {
                         })) continue;
 
                         log.debug("clicked menu item {d}: {t}", .{ item_widget.index, item_widget.item.value });
-                        if (try menu.selectItem(app, item_widget.item)) {
+                        if (try item_widget.item.activate(app)) {
                             return .close;
                         }
                         break;
@@ -248,38 +280,6 @@ pub const Menu = struct {
             e.handle(@src(), wd);
         }
         return .ok;
-    }
-
-    /// Returns true if the app should close
-    pub fn selectItem(menu: *Menu, app: *App, item: *Item) !bool {
-        switch (item.value) {
-            .menu => |next_menu| {
-                menu._state = .init;
-                try app.screen_stack.append(app.gpa, .{ .menu = next_menu });
-            },
-            .site_form => |next_site_form| {
-                menu._state = .init;
-                try app.screen_stack.append(app.gpa, .{ .site_form = next_site_form });
-            },
-            .site => |site| if (site.run()) {
-                return true;
-            } else {
-                return error.OpenSiteFailure;
-            },
-            .lua_func => |f| {
-                if (app.lua.getIndexRaw(zlua.registry_index, f) != .function) {
-                    return error.InvalidLuaFunction;
-                }
-
-                app.lua.protectedCall(.{}) catch {
-                    log.err("lua call failed: {!s}", .{app.lua.toString(-1)});
-                    return false;
-                };
-                return true;
-            },
-            .none => {},
-        }
-        return false;
     }
 };
 
