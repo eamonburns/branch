@@ -17,6 +17,7 @@ pub const App = struct {
     pub fn init(io: Io, gpa: Allocator, script_file: [:0]const u8) !App {
         // === Initialize Lua === //
         const lua: *zlua.Lua = try .init(gpa);
+        errdefer lua.deinit();
         lua.openLibs();
 
         lua_bindings.register(io, gpa, lua);
@@ -42,6 +43,7 @@ pub const App = struct {
             .lua = lua,
             .should_close = false,
         };
+        errdefer app.deinit();
 
         if (try lua_site.activate(&app)) {
             app.should_close = true;
