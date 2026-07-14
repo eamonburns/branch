@@ -18,8 +18,9 @@ pub const App = struct {
         // === Initialize Lua === //
         const lua: *zlua.Lua = try .init(gpa);
         lua.openLibs();
-        lua_bindings.gpa_singleton = gpa;
-        lua_bindings.register(lua);
+
+        lua_bindings.register(io, gpa, lua);
+
         lua.doString(@embedFile("branch.lua")) catch |err| {
             std.log.err("{!s}", .{lua.toString(-1)});
             return err;
@@ -50,12 +51,17 @@ pub const App = struct {
     }
 
     pub fn deinit(app: *App) void {
-        const root_screen = app.screen_stack.items[0];
-        switch (root_screen) {
-            inline else => |s| {
-                s.deinit(app.gpa);
-                app.gpa.destroy(s);
-            },
+        if (app.screen_stack.items.len == 0) {
+            std.log.warn("App.deinit: empty screen stack?", .{});
+            return;
+        } else {
+            const root_screen = app.screen_stack.items[0];
+            switch (root_screen) {
+                inline else => |s| {
+                    s.deinit(app.gpa);
+                    app.gpa.destroy(s);
+                },
+            }
         }
         app.screen_stack.deinit(app.gpa);
         app.lua.deinit();

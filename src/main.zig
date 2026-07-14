@@ -33,6 +33,7 @@ var app_singleton: branch.App = .{
 fn appInit(_: *dvui.Window) !void {
     const init = dvui.App.main_init orelse unreachable;
     var args = try init.minimal.args.iterateAllocator(init.gpa);
+    defer args.deinit();
     _ = args.skip();
 
     app_singleton = try .init(

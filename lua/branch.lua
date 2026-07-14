@@ -25,6 +25,40 @@ function branch.Site(opts)
 	end)
 end
 
+---@param opts { command: string, arguments?: string[], key?: string }
+---@return branch.Item
+function branch.Cmd(opts)
+	if type(opts) ~= "table" then
+		error("Cmd: opts is not a table", 2)
+	end
+
+	if type(opts.command) ~= "string" then
+		error("Cmd: opts.command is not a string", 2)
+	end
+
+	opts.arguments = opts.arguments or {}
+
+	if type(opts.arguments) ~= "table" then
+		error("Cmd: opts.arguments is not a list of strings", 2)
+	end
+	for _, a in ipairs(opts.arguments) do
+		if type(a) ~= "string" then
+			error("Cmd: opts.arguments is not a list of strings", 2)
+		end
+	end
+
+	local name = table.concat({ opts.command, unpack(opts.arguments) }, " ")
+
+	local self = {
+		command = opts.command,
+		arguments = opts.arguments,
+	}
+
+	return _branch_new_item(name, opts.key, function()
+		_branch_exec(self.command, unpack(self.arguments))
+	end)
+end
+
 ---@param opts { title: string, key?: string, [integer]: branch.Item }
 ---@return branch.Item
 function branch.Menu(opts)
@@ -48,7 +82,7 @@ end
 ---@return branch.Item
 function branch.None(opts)
 	if type(opts) ~= "table" then
-		error("Menu: opts is not a table", 2)
+		error("None: opts is not a table", 2)
 	end
 
 	local name = opts.name

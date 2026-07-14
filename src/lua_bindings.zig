@@ -6,10 +6,16 @@ const Lua = zlua.Lua;
 const branch = @import("root.zig");
 const Item = branch.Menu.Item;
 
-// HACK: How can I do this properly?
-pub var gpa_singleton: std.mem.Allocator = .failing;
+/// Singltons, initialized when `register` is called
+const static = struct {
+    pub var io: std.Io = .failing;
+    pub var gpa: std.mem.Allocator = .failing;
+};
 
-pub fn register(lua: *Lua) void {
+pub fn register(io: std.Io, gpa: std.mem.Allocator, lua: *Lua) void {
+    static.io = io;
+    static.gpa = gpa;
+
     inline for (@typeInfo(@This()).@"struct".decls) |decl| {
         const d = @field(@This(), decl.name);
         if (@TypeOf(&d) != zlua.CFn) continue;
@@ -65,7 +71,7 @@ pub fn new_menu(l: ?*zlua.LuaState) callconv(.c) c_int {
         };
     } else null;
 
-    const items = gpa_singleton.alloc(Item, @intCast(lua.getTop() - 2)) catch {
+    const items = static.gpa.alloc(Item, @intCast(lua.getTop() - 2)) catch {
         return lua.raiseErrorStr("OOM", .{});
     };
 
@@ -78,7 +84,7 @@ pub fn new_menu(l: ?*zlua.LuaState) callconv(.c) c_int {
         items[i] = item.*;
     }
 
-    const menu = gpa_singleton.create(branch.Menu) catch {
+    const menu = static.gpa.create(branch.Menu) catch {
         return lua.raiseErrorStr("OOM", .{});
     };
     menu.* = .{
@@ -134,5 +140,31 @@ pub fn open_url(l: ?*zlua.LuaState) callconv(.c) c_int {
         });
     }
 
+    return 0;
+}
+
+///@param command string # Command to run
+///@param ... string # Arguments to pass to command
+pub fn exec(l: ?*zlua.LuaState) callconv(.c) c_int {
+    const lua: *Lua = if (l) |lua| @ptrCast(lua) else return 0;
+
+    const command = lua.checkString(1);
+    const nargs: usize = @intCast(lua.getTop());
+    const argv = static.gpa.alloc([]const u8, nargs) catch {
+        return lua.raiseErrorStr("OOM", .{});
+    };
+    defer static.gpa.free(argv);
+    argv[0] = command;
+    for (argv[1..], 2..) |*arg, i| {
+        arg.* = lua.checkString(@intCast(i));
+    }
+
+    // TODO: Proper Io
+    const child = std.process.spawn(static.io, .{
+        .argv = argv,
+    }) catch |err| {
+        return lua.raiseErrorStr("unable to start process: %s", .{@errorName(err).ptr});
+    };
+    _ = child; // TODO: Should I do something with the child process?
     return 0;
 }

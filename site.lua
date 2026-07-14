@@ -1,9 +1,15 @@
 local Menu = branch.Menu
 local Site = branch.Site
+local Cmd = branch.Cmd
 local None = branch.None
 
 return Menu {
 	title = "Lua Menu",
+
+	Cmd {
+		command = "wt.exe",
+		key = "c",
+	},
 
 	None { name = "first", key = "f" },
 	None { name = "second", key = "s" },

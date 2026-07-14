@@ -27,3 +27,9 @@ end
 function _branch_open_url(url) ---@diagnostic disable-line: unused-local
 	error("_branch_open_url should be defined by host")
 end
+
+---@param command string # Command to run
+---@param ... string # Arguments to pass to command
+function _branch_exec(command, ...) ---@diagnostic disable-line: unused-local,unused-vararg
+	error("_branch_exec should be defined by host")
+end
