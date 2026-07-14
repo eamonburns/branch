@@ -3,6 +3,10 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const subsystem = b.option(std.zig.Subsystem, "subsystem", "Subsystem to use") orelse
+        if (target.result.os.tag == .windows and b.release_mode != .off) blk: {
+            break :blk std.zig.Subsystem.windows;
+        } else null;
 
     const dvui_dep = b.dependency("dvui", .{ .target = target, .optimize = optimize, .backend = .sdl3 });
 
@@ -37,6 +41,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    exe.subsystem = subsystem;
 
     b.installArtifact(exe);
 
