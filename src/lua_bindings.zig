@@ -159,7 +159,6 @@ pub fn exec(l: ?*zlua.LuaState) callconv(.c) c_int {
         arg.* = lua.checkString(@intCast(i));
     }
 
-    // TODO: Proper Io
     const child = std.process.spawn(static.io, .{
         .argv = argv,
     }) catch |err| {
