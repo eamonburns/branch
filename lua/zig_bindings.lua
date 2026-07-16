@@ -1,4 +1,5 @@
----Definitions for Zig functions
+---Definitions for Zig functions.
+---This is only used as documentation, and should never be `require`d.
 
 ---@param name string # Display name
 ---@param key? string # Key to activate item
@@ -14,6 +15,25 @@ end
 ---@return branch.Item
 function _branch_new_menu(name, key, ...) ---@diagnostic disable-line: unused-local,unused-vararg
   error("_branch_new_menu should be defined by host")
+end
+
+---@param name string # Display name
+---@param id string # Identifier (unique within the form)
+---@param type "number"|"string"|"boolean"
+---@param validate? fun(string): boolean, string?
+---@param modify? fun(any): any
+---@return branch.Field
+function _branch_new_field(name, id, type, validate, modify) ---@diagnostic disable-line: unused-local
+  error("_branch_new_field should be defined by host")
+end
+
+---@param name string # Display name
+---@param key? string # Key to activate item
+---@param callback fun(fields: table<string, any>): branch.Item
+---@param ... branch.Field # List of items in the menu
+---@return branch.Item
+function _branch_new_form(name, key, callback, ...) ---@diagnostic disable-line: unused-local,unused-vararg
+  error("_branch_new_form should be defined by host")
 end
 
 ---@param name string # Display name

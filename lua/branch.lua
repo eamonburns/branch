@@ -79,11 +79,75 @@ function branch.Menu(opts)
     error("Menu: opts.title is not a string", 2)
   end
 
+  if opts.key and type(opts.key) ~= "string" then
+    error("Menu: opts.key is not a string", 2)
+  end
+
   if not opts[1] then
     error("Menu: no menu items", 2)
   end
 
   return _branch_new_menu(title, opts.key, unpack(opts))
+end
+
+---Information for form fields. Describes how they should be displayed,
+---validated, and modified. Can only be created using internal functions.
+---@class branch.Field
+
+---@param opts { name: string, id: string, type: "number"|"string"|"boolean", validate?: fun(string): (boolean, string?), modify?: fun(string): string }
+---@return branch.Field
+function branch.Field(opts)
+  if type(opts) ~= "table" then
+    error("Field: opts is not a table", 2)
+  end
+
+  if type(opts.name) ~= "string" then
+    error("Field: opts.name is not a string", 2)
+  end
+
+  if type(opts.id) ~= "string" then
+    error("Field: opts.id is not a string", 2)
+  end
+
+  if opts.type ~= "number" and opts.type ~= "string" and opts.type ~= "boolean" then
+    error('Field: opts.type is not "number"|"string"|"boolean"', 2)
+  end
+
+  if opts.validate and type(opts.validate) ~= "function" then
+    error("Field: opts.validate is not function", 2)
+  end
+
+  if opts.modify and type(opts.modify) ~= "function" then
+    error("Field: opts.modify is not function", 2)
+  end
+
+  return _branch_new_field(opts.name, opts.id, opts.type, opts.validate, opts.modify)
+end
+
+---@param opts { title: string, key?: string, callback: fun(fields: table<string, string>): (branch.Item), [integer]: branch.Field }
+---@return branch.Item
+function branch.Form(opts)
+  if type(opts) ~= "table" then
+    error("Form: opts is not a table", 2)
+  end
+
+  if type(opts.title) ~= "string" then
+    error("Form: opts.title is not a string", 2)
+  end
+
+  if opts.key and type(opts.key) ~= "string" then
+    error("Form: opts.key is not a string", 2)
+  end
+
+  if type(opts.callback) ~= "function" then
+    error("Form: opts.callback is not function", 2)
+  end
+
+  if not opts[1] then
+    error("Form: no fields", 2)
+  end
+
+  return _branch_new_form(opts.title, opts.key, opts.callback, unpack(opts))
 end
 
 ---@param opts { name: string, key?: string }
