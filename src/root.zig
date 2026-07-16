@@ -44,6 +44,11 @@ pub const App = struct {
             .should_close = false,
         };
         errdefer app.deinit();
+        defer if (app.should_close) {
+            lua_site.deinit(app.gpa);
+        } else {
+            app.gpa.free(lua_site.name);
+        };
 
         if (try lua_site.activate(&app)) {
             app.should_close = true;
@@ -76,14 +81,14 @@ pub const App = struct {
 
         switch (current_screen) {
             .menu => |m| return m.drawWindow(app),
-            .site_form => |sf| return sf.drawWindow(app),
+            .form => |f| return f.drawWindow(app),
         }
     }
 };
 
 pub const Screen = union(enum) {
     menu: *Menu,
-    site_form: *SiteForm,
+    form: *Form,
 };
 
 pub const Menu = struct {
@@ -106,15 +111,33 @@ pub const Menu = struct {
     pub const init: Menu = .{};
 
     pub const Item = struct {
-        key: ?dvui.enums.Key,
         name: []const u8,
+        key: ?dvui.enums.Key,
         value: union(enum) {
             menu: *Menu,
-            lua_func: i32,
-            site: *Site,
-            site_form: *SiteForm,
+            lua_func: LuaRef,
+            // site: *Site,
+            form: *Form,
             none, // NOTE: Placeholder
         },
+
+        pub fn deinit(self: Item, gpa: Allocator) void {
+            gpa.free(self.name);
+            switch (self.value) {
+                .menu => |m| {
+                    defer gpa.destroy(m);
+                    m.deinit(gpa);
+                },
+                .form => |f| {
+                    defer gpa.destroy(f);
+                    f.deinit(gpa);
+                },
+                .lua_func => {
+                    // TODO: Lua.unref
+                },
+                .none => {},
+            }
+        }
 
         /// Returns true if the app should close
         pub fn activate(self: Item, app: *App) !bool {
@@ -126,18 +149,18 @@ pub const Menu = struct {
                     try app.screen_stack.append(app.gpa, .{ .menu = next_menu });
                     return false;
                 },
-                .site_form => |next_site_form| {
+                .form => |next_form| {
                     if (app.screen_stack.getLastOrNull()) |current_screen| {
                         current_screen.menu._state = .init;
                     }
-                    try app.screen_stack.append(app.gpa, .{ .site_form = next_site_form });
+                    try app.screen_stack.append(app.gpa, .{ .form = next_form });
                     return false;
                 },
-                .site => |site| if (site.run()) {
-                    return true;
-                } else {
-                    return error.OpenSiteFailure;
-                },
+                // .site => |site| if (site.run()) {
+                //     return true;
+                // } else {
+                //     return error.OpenSiteFailure;
+                // },
                 .lua_func => |f| {
                     if (app.lua.getIndexRaw(zlua.registry_index, f) != .function) {
                         return error.InvalidLuaFunction;
@@ -155,24 +178,7 @@ pub const Menu = struct {
     };
 
     pub fn deinit(menu: *Menu, gpa: Allocator) void {
-        for (menu.items.items) |item| switch (item.value) {
-            .menu => |m| {
-                defer gpa.destroy(m);
-                m.deinit(gpa);
-            },
-            .site_form => |sf| {
-                defer gpa.destroy(sf);
-                sf.deinit(gpa);
-            },
-            .site => |s| {
-                defer gpa.destroy(s);
-                s.deinit(gpa);
-            },
-            .lua_func => {
-                // TODO: Lua.unref
-            },
-            .none => {},
-        };
+        for (menu.items.items) |item| item.deinit(gpa);
         menu.items.deinit(gpa);
     }
 
@@ -310,23 +316,23 @@ pub const FormField = struct {
     }
 };
 
-pub const Site = struct {
+pub const _Site = struct {
     url: []const u8,
 
     const log = std.log.scoped(.@"branch.Site");
 
-    pub fn init(gpa: Allocator, url: []const u8) Allocator.Error!Site {
+    pub fn init(gpa: Allocator, url: []const u8) Allocator.Error!_Site {
         return .{
             .url = try gpa.dupe(u8, url),
         };
     }
-    pub fn deinit(site: Site, gpa: Allocator) void {
+    pub fn deinit(site: _Site, gpa: Allocator) void {
         gpa.free(site.url);
     }
 
     /// Returns true when the site was successfully opened,
     /// false if there was a problem
-    pub fn run(site: Site) bool {
+    pub fn run(site: _Site) bool {
         return dvui.openURL(.{
             .new_window = false,
             .url = site.url,
@@ -336,7 +342,7 @@ pub const Site = struct {
 
 /// Asserts that `format` is valid and contains only placeholders contained in `values`.
 /// Caller owns returned memory
-fn formatFields(gpa: Allocator, format: []const u8, values: FormField.Values) ![]const u8 {
+fn _formatFields(gpa: Allocator, format: []const u8, values: FormField.Values) ![]const u8 {
     var aw: std.Io.Writer.Allocating = .init(gpa);
     defer aw.deinit();
     const w = &aw.writer;
@@ -362,24 +368,24 @@ fn formatFields(gpa: Allocator, format: []const u8, values: FormField.Values) ![
     return aw.toOwnedSlice();
 }
 
-pub const SiteForm = struct {
+pub const _SiteForm = struct {
     format: []const u8,
     fields: FormFields,
 
     const log = std.log.scoped(.@"branch.SiteForm");
 
-    pub fn init(gpa: Allocator, format: []const u8, fields: FormFields) Allocator.Error!SiteForm {
+    pub fn init(gpa: Allocator, format: []const u8, fields: FormFields) Allocator.Error!_SiteForm {
         return .{
             .format = try gpa.dupe(u8, format),
             .fields = fields,
         };
     }
-    pub fn deinit(form: *SiteForm, gpa: Allocator) void {
+    pub fn deinit(form: *_SiteForm, gpa: Allocator) void {
         gpa.free(form.format);
         form.fields.deinit(gpa);
     }
 
-    pub fn drawWindow(form: *SiteForm, app: *App) !dvui.App.Result {
+    pub fn drawWindow(form: *_SiteForm, app: *App) !dvui.App.Result {
         const arena = dvui.currentWindow().arena();
         var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
             .expand = .both,
@@ -406,8 +412,8 @@ pub const SiteForm = struct {
         }
 
         if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
-            const formatted_url = try formatFields(arena, form.format, field_values);
-            const site: Site = .{
+            const formatted_url = try _formatFields(arena, form.format, field_values);
+            const site: _Site = .{
                 .url = formatted_url,
             };
             if (site.run()) {
@@ -438,3 +444,115 @@ pub const SiteForm = struct {
         return .ok;
     }
 };
+
+pub const Form = struct {
+    callback: LuaRef,
+    fields: []Field,
+
+    pub const Field = struct {
+        name: []const u8,
+        id: [:0]const u8,
+        type: Type,
+        validateFn: LuaRef,
+        modifyFn: LuaRef,
+
+        pub const Type = enum { number, string, boolean };
+
+        pub fn deinit(f: Field, gpa: Allocator) void {
+            gpa.free(f.name);
+            gpa.free(f.id);
+            // TODO: lua.unref(f.validateFn)
+            // TODO: lua.unref(f.modifyFn)
+        }
+    };
+
+    pub fn deinit(f: Form, gpa: Allocator) void {
+        // TODO: lua.unref(f.callback)
+        for (f.fields) |field| {
+            field.deinit(gpa);
+        }
+        gpa.free(f.fields);
+    }
+
+    pub fn drawWindow(form: *Form, app: *App) !dvui.App.Result {
+        const arena = dvui.currentWindow().arena();
+        var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
+            .expand = .both,
+        });
+        defer vbox.deinit();
+
+        const field_values = try arena.alloc(struct {
+            id: [:0]const u8,
+            value: []const u8,
+        }, form.fields.len);
+
+        var enter_pressed = false;
+        for (form.fields, 0..) |field, i| {
+            dvui.labelNoFmt(@src(), field.name, .{}, .{});
+            const field_widget = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
+            defer field_widget.deinit();
+
+            enter_pressed = enter_pressed or field_widget.enter_pressed;
+            field_values[i] = .{
+                .id = field.id,
+                .value = field_widget.textGet(),
+            };
+        }
+
+        if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
+            if (app.lua.getIndexRaw(zlua.registry_index, form.callback) != .function) {
+                return error.InvalidLuaFunction;
+            }
+            // stack: [callback]
+
+            app.lua.newTable();
+            // stack: [callback, fields_table]
+            const field_table_idx = app.lua.getTop();
+
+            for (field_values) |v| {
+                _ = app.lua.pushString(v.value);
+                app.lua.setField(field_table_idx, v.id);
+            }
+            app.lua.protectedCall(.{
+                .args = 1,
+                .results = 1,
+            }) catch {
+                std.log.err("form callback failed: {!s}", .{app.lua.toString(-1)});
+                return .close;
+            };
+
+            const item = app.lua.toUserdata(Menu.Item, -1) catch {
+                return error.NotUserdata;
+            };
+
+            if (try item.activate(app)) {
+                item.deinit(app.gpa);
+                return .close;
+            } else {
+                return .ok;
+            }
+        }
+
+        const wd = dvui.currentWindow().data();
+        events: for (dvui.events()) |*e| {
+            switch (e.evt) {
+                .key => |key| {
+                    if (key.action != .down) continue :events;
+                    switch (key.code) {
+                        .escape => if (app.screen_stack.items.len > 1) {
+                            _ = app.screen_stack.pop();
+                        },
+                        else => continue,
+                    }
+                    std.log.debug("key event: {t}", .{e.evt.key.code});
+                },
+                else => continue :events,
+            }
+            e.handle(@src(), wd);
+        }
+
+        return .ok;
+    }
+};
+
+const LuaRef = i32; // TODO: Type-safe ref `enum(i32) { _ }`

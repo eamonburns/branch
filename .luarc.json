@@ -5,6 +5,8 @@
         "_branch_new_menu",
         "_branch_new_none",
         "_branch_open_url",
-        "_branch_exec"
+        "_branch_exec",
+        "_branch_new_form",
+        "_branch_new_field"
     ]
 }
