@@ -94,7 +94,7 @@ end
 ---validated, and modified. Can only be created using internal functions.
 ---@class branch.Field
 
----@param opts { name: string, id: string, type: "number"|"string"|"boolean", validate?: fun(string): (boolean, string?), modify?: fun(string): string }
+---@param opts { name: string, id: string, type: "number"|"string"|"boolean", validate?: fun(input: string): (boolean, string?), modify?: fun(input: string): string }
 ---@return branch.Field
 function branch.Field(opts)
   if type(opts) ~= "table" then

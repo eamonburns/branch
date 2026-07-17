@@ -26,6 +26,12 @@ return Menu {
       name = "Summary",
       id = "summary",
       type = "string",
+      validate = function(input)
+        if input:match("s") then
+          return false, "why would you ever think there should be an S in the summary!??!?!?!??!?!?!?"
+        end
+        return true
+      end,
       modify = function(s)
         return s .. " (summary)"
       end,
