@@ -276,7 +276,6 @@ pub const Menu = struct {
                 .mouse => |mouse| {
                     if (mouse.button != .left or mouse.action != .press) continue :events;
                     for (item_widgets.items) |item_widget| {
-                        log.debug("widget {d} rect: {any}", .{ item_widget.index, item_widget.widget_rect });
                         if (!dvui.eventMatch(e, .{
                             .id = item_widget.widget_id,
                             .r = item_widget.widget_rect,
@@ -297,153 +296,134 @@ pub const Menu = struct {
     }
 };
 
-pub const FormFields = std.StringArrayHashMapUnmanaged(FormField);
-pub const FormField = struct {
-    label: []const u8,
-    t: Type,
-    modify: ?Modifier,
+// pub const _Site = struct {
+//     url: []const u8,
+//
+//     const log = std.log.scoped(.@"branch.Site");
+//
+//     pub fn init(gpa: Allocator, url: []const u8) Allocator.Error!_Site {
+//         return .{
+//             .url = try gpa.dupe(u8, url),
+//         };
+//     }
+//     pub fn deinit(site: _Site, gpa: Allocator) void {
+//         gpa.free(site.url);
+//     }
+//
+//     /// Returns true when the site was successfully opened,
+//     /// false if there was a problem
+//     pub fn run(site: _Site) bool {
+//         return dvui.openURL(.{
+//             .new_window = false,
+//             .url = site.url,
+//         });
+//     }
+// };
 
-    pub const Type = enum { string, integer };
-    pub const Modifier = *const fn ([]const u8) []const u8;
+// /// Asserts that `format` is valid and contains only placeholders contained in `values`.
+// /// Caller owns returned memory
+// fn _formatFields(gpa: Allocator, format: []const u8, values: FormField.Values) ![]const u8 {
+//     var aw: std.Io.Writer.Allocating = .init(gpa);
+//     defer aw.deinit();
+//     const w = &aw.writer;
+//
+//     var chunk_start: usize = 0;
+//     while (std.mem.indexOfPos(u8, format, chunk_start, "${")) |idx| {
+//         try w.writeAll(format[chunk_start..idx]);
+//         const id_start = idx + 2;
+//         const id_end = std.mem.indexOfPos(u8, format, id_start, "}") orelse unreachable; // There must by a matching closing '}'
+//         const id = format[id_start..id_end];
+//
+//         for (values) |value| {
+//             if (std.mem.eql(u8, value.id, id)) {
+//                 try w.writeAll(value.value);
+//                 break;
+//             }
+//         } else unreachable; // Format placeholder with the given id was not found
+//
+//         chunk_start = id_end + 1;
+//     }
+//     try w.writeAll(format[chunk_start..]);
+//
+//     return aw.toOwnedSlice();
+// }
 
-    pub const Values = []struct {
-        id: []const u8,
-        value: []const u8,
-    };
-
-    pub fn allocValues(gpa: Allocator, n: usize) Allocator.Error!Values {
-        return gpa.alloc(@typeInfo(Values).pointer.child, n);
-    }
-};
-
-pub const _Site = struct {
-    url: []const u8,
-
-    const log = std.log.scoped(.@"branch.Site");
-
-    pub fn init(gpa: Allocator, url: []const u8) Allocator.Error!_Site {
-        return .{
-            .url = try gpa.dupe(u8, url),
-        };
-    }
-    pub fn deinit(site: _Site, gpa: Allocator) void {
-        gpa.free(site.url);
-    }
-
-    /// Returns true when the site was successfully opened,
-    /// false if there was a problem
-    pub fn run(site: _Site) bool {
-        return dvui.openURL(.{
-            .new_window = false,
-            .url = site.url,
-        });
-    }
-};
-
-/// Asserts that `format` is valid and contains only placeholders contained in `values`.
-/// Caller owns returned memory
-fn _formatFields(gpa: Allocator, format: []const u8, values: FormField.Values) ![]const u8 {
-    var aw: std.Io.Writer.Allocating = .init(gpa);
-    defer aw.deinit();
-    const w = &aw.writer;
-
-    var chunk_start: usize = 0;
-    while (std.mem.indexOfPos(u8, format, chunk_start, "${")) |idx| {
-        try w.writeAll(format[chunk_start..idx]);
-        const id_start = idx + 2;
-        const id_end = std.mem.indexOfPos(u8, format, id_start, "}") orelse unreachable; // There must by a matching closing '}'
-        const id = format[id_start..id_end];
-
-        for (values) |value| {
-            if (std.mem.eql(u8, value.id, id)) {
-                try w.writeAll(value.value);
-                break;
-            }
-        } else unreachable; // Format placeholder with the given id was not found
-
-        chunk_start = id_end + 1;
-    }
-    try w.writeAll(format[chunk_start..]);
-
-    return aw.toOwnedSlice();
-}
-
-pub const _SiteForm = struct {
-    format: []const u8,
-    fields: FormFields,
-
-    const log = std.log.scoped(.@"branch.SiteForm");
-
-    pub fn init(gpa: Allocator, format: []const u8, fields: FormFields) Allocator.Error!_SiteForm {
-        return .{
-            .format = try gpa.dupe(u8, format),
-            .fields = fields,
-        };
-    }
-    pub fn deinit(form: *_SiteForm, gpa: Allocator) void {
-        gpa.free(form.format);
-        form.fields.deinit(gpa);
-    }
-
-    pub fn drawWindow(form: *_SiteForm, app: *App) !dvui.App.Result {
-        const arena = dvui.currentWindow().arena();
-        var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
-            .expand = .both,
-        });
-        defer vbox.deinit();
-
-        var field_values = try FormField.allocValues(
-            arena,
-            form.fields.entries.len,
-        );
-        var enter_pressed = false;
-        var it = form.fields.iterator();
-        var i: usize = 0;
-        while (it.next()) |entry| : (i += 1) {
-            dvui.labelNoFmt(@src(), entry.value_ptr.label, .{}, .{});
-            const field = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
-            defer field.deinit();
-
-            enter_pressed = enter_pressed or field.enter_pressed;
-            field_values[i] = .{
-                .id = entry.key_ptr.*,
-                .value = field.textGet(),
-            };
-        }
-
-        if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
-            const formatted_url = try _formatFields(arena, form.format, field_values);
-            const site: _Site = .{
-                .url = formatted_url,
-            };
-            if (site.run()) {
-                return .close;
-            } else {
-                return error.OpenSiteFailure;
-            }
-        }
-
-        const wd = dvui.currentWindow().data();
-        events: for (dvui.events()) |*e| {
-            switch (e.evt) {
-                .key => |key| {
-                    if (key.action != .down) continue :events;
-                    switch (key.code) {
-                        .escape => if (app.screen_stack.items.len > 1) {
-                            _ = app.screen_stack.pop();
-                        },
-                        else => continue,
-                    }
-                    log.debug("key event: {t}", .{e.evt.key.code});
-                },
-                else => continue :events,
-            }
-            e.handle(@src(), wd);
-        }
-
-        return .ok;
-    }
-};
+// pub const _SiteForm = struct {
+//     format: []const u8,
+//     fields: FormFields,
+//
+//     const log = std.log.scoped(.@"branch.SiteForm");
+//
+//     pub fn init(gpa: Allocator, format: []const u8, fields: FormFields) Allocator.Error!_SiteForm {
+//         return .{
+//             .format = try gpa.dupe(u8, format),
+//             .fields = fields,
+//         };
+//     }
+//     pub fn deinit(form: *_SiteForm, gpa: Allocator) void {
+//         gpa.free(form.format);
+//         form.fields.deinit(gpa);
+//     }
+//
+//     pub fn drawWindow(form: *_SiteForm, app: *App) !dvui.App.Result {
+//         const arena = dvui.currentWindow().arena();
+//         var vbox = dvui.box(@src(), .{ .dir = .vertical }, .{
+//             .expand = .both,
+//         });
+//         defer vbox.deinit();
+//
+//         var field_values = try FormField.allocValues(
+//             arena,
+//             form.fields.entries.len,
+//         );
+//         var enter_pressed = false;
+//         var it = form.fields.iterator();
+//         var i: usize = 0;
+//         while (it.next()) |entry| : (i += 1) {
+//             dvui.labelNoFmt(@src(), entry.value_ptr.label, .{}, .{});
+//             const field = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
+//             defer field.deinit();
+//
+//             enter_pressed = enter_pressed or field.enter_pressed;
+//             field_values[i] = .{
+//                 .id = entry.key_ptr.*,
+//                 .value = field.textGet(),
+//             };
+//         }
+//
+//         if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
+//             const formatted_url = try _formatFields(arena, form.format, field_values);
+//             const site: _Site = .{
+//                 .url = formatted_url,
+//             };
+//             if (site.run()) {
+//                 return .close;
+//             } else {
+//                 return error.OpenSiteFailure;
+//             }
+//         }
+//
+//         const wd = dvui.currentWindow().data();
+//         events: for (dvui.events()) |*e| {
+//             switch (e.evt) {
+//                 .key => |key| {
+//                     if (key.action != .down) continue :events;
+//                     switch (key.code) {
+//                         .escape => if (app.screen_stack.items.len > 1) {
+//                             _ = app.screen_stack.pop();
+//                         },
+//                         else => continue,
+//                     }
+//                     log.debug("key event: {t}", .{e.evt.key.code});
+//                 },
+//                 else => continue :events,
+//             }
+//             e.handle(@src(), wd);
+//         }
+//
+//         return .ok;
+//     }
+// };
 
 pub const Form = struct {
     callback: LuaRef,
@@ -484,11 +464,12 @@ pub const Form = struct {
         const field_values = try arena.alloc(struct {
             id: [:0]const u8,
             value: []const u8,
+            modifyRef: LuaRef,
         }, form.fields.len);
 
         var enter_pressed = false;
         for (form.fields, 0..) |field, i| {
-            dvui.labelNoFmt(@src(), field.name, .{}, .{});
+            dvui.labelNoFmt(@src(), field.name, .{}, .{ .id_extra = i });
             const field_widget = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
             defer field_widget.deinit();
 
@@ -496,7 +477,9 @@ pub const Form = struct {
             field_values[i] = .{
                 .id = field.id,
                 .value = field_widget.textGet(),
+                .modifyRef = field.modifyFn,
             };
+            // TODO: Validate (debounced)
         }
 
         if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
@@ -510,7 +493,21 @@ pub const Form = struct {
             const field_table_idx = app.lua.getTop();
 
             for (field_values) |v| {
-                _ = app.lua.pushString(v.value);
+                if (v.modifyRef != zlua.ref_nil) {
+                    if (app.lua.getIndexRaw(zlua.registry_index, v.modifyRef) != .function) {
+                        return error.InvalidLuaFunction;
+                    }
+                    _ = app.lua.pushString(v.value);
+                    app.lua.protectedCall(.{
+                        .args = 1,
+                        .results = 1,
+                    }) catch {
+                        std.log.err("modify failed: {!s}", .{app.lua.toString(-1)});
+                        return error.CallbackFailed;
+                    };
+                } else {
+                    _ = app.lua.pushString(v.value);
+                }
                 app.lua.setField(field_table_idx, v.id);
             }
             app.lua.protectedCall(.{
