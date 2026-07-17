@@ -12,6 +12,33 @@ return Menu {
     command = "wt.exe",
     key = "c",
   },
+  Form {
+    title = "Notification",
+    key = "n",
+    callback = function(fields)
+      return Cmd {
+        command = "notify-send",
+        arguments = { fields.summary, fields.body },
+      }
+    end,
+
+    Field {
+      name = "Summary",
+      id = "summary",
+      type = "string",
+      modify = function(s)
+        return s .. " (summary)"
+      end,
+    },
+    Field {
+      name = "Body",
+      id = "body",
+      type = "string",
+      modify = function(b)
+        return b .. " (body)"
+      end,
+    },
+  },
 
   None { name = "first", key = "f" },
   None { name = "second", key = "s" },
