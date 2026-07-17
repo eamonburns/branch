@@ -469,17 +469,62 @@ pub const Form = struct {
 
         var enter_pressed = false;
         for (form.fields, 0..) |field, i| {
+            const VALIDATE_ERROR_NAME = "validate_error";
             dvui.labelNoFmt(@src(), field.name, .{}, .{ .id_extra = i });
-            const field_widget = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
-            defer field_widget.deinit();
+            const te_id = blk: {
+                const te = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
+                defer te.deinit();
+                const te_id = te.data().id;
 
-            enter_pressed = enter_pressed or field_widget.enter_pressed;
-            field_values[i] = .{
-                .id = field.id,
-                .value = field_widget.textGet(),
-                .modifyRef = field.modifyFn,
+                enter_pressed = enter_pressed or te.enter_pressed;
+                field_values[i] = .{
+                    .id = field.id,
+                    .value = te.textGet(),
+                    .modifyRef = field.modifyFn,
+                };
+
+                if (field.validateFn == zlua.ref_nil) continue;
+
+                if (te.text_changed) {
+                    std.log.debug("text changed in field {s}", .{field.id});
+                    // (Re)start debounce timer
+                    dvui.timer(te_id, 500_000); // 500ms
+                } else if (dvui.timerDone(te_id)) {
+                    std.log.debug("debounce timer done. validating", .{});
+                    // Validate
+                    dumpLuaStack(app.lua);
+                    if (app.lua.getIndexRaw(zlua.registry_index, field.validateFn) != .function) {
+                        return error.InvalidLuaFunction;
+                    }
+                    // stack: [validate]
+                    _ = app.lua.pushString(te.getText());
+                    // stack: [validate, input]
+                    app.lua.protectedCall(.{
+                        .args = 1,
+                        .results = 2,
+                    }) catch {
+                        std.log.err("validate callback failed: {!s}", .{app.lua.toString(-1)});
+                        return .close;
+                    };
+                    // stack: [..., success, message?]
+                    if (!app.lua.toBoolean(-2)) {
+                        if (!app.lua.isNoneOrNil(-1) and !app.lua.isString(-1)) {
+                            return error.ExpectedString;
+                        }
+                        const message: []const u8 = app.lua.optString(-1) orelse "Invalid input!";
+                        dvui.dataSetSlice(null, te_id, VALIDATE_ERROR_NAME, message);
+                    } else {
+                        dvui.dataRemove(null, te_id, VALIDATE_ERROR_NAME);
+                    }
+                    app.lua.pop(2);
+                    // stack: [...]
+                }
+                break :blk te_id;
             };
-            // TODO: Validate (debounced)
+
+            if (dvui.dataGetSlice(null, te_id, VALIDATE_ERROR_NAME, []u8)) |message| {
+                dvui.labelNoFmt(@src(), message, .{}, .{ .id_extra = i });
+            }
         }
 
         if (enter_pressed or dvui.button(@src(), "Submit", .{}, .{})) {
@@ -553,3 +598,26 @@ pub const Form = struct {
 };
 
 const LuaRef = i32; // TODO: Type-safe ref `enum(i32) { _ }`
+
+fn dumpLuaStack(lua: *zlua.Lua) void {
+    const top = lua.getTop();
+
+    std.debug.print("lua stack ({d} items)\n", .{top});
+    for (0..@intCast(top)) |i| {
+        const idx: i32 = @intCast(i + 1);
+
+        const t = lua.typeOf(idx);
+        std.debug.print("  {d} ({d}) {s}: ", .{
+            idx,
+            (idx - top - 1),
+            lua.typeName(t),
+        });
+        switch (t) {
+            .number => std.debug.print("{!d}\n", .{lua.toNumber(idx)}),
+            .string => std.debug.print("{!s}\n", .{lua.toString(idx)}),
+            .boolean => std.debug.print("{any}\n", .{lua.toBoolean(idx)}),
+            .nil => std.debug.print("nil\n", .{}),
+            else => std.debug.print("{?p}\n", .{lua.toPointer(idx)}),
+        }
+    }
+}
