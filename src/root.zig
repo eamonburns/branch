@@ -463,13 +463,15 @@ pub const Form = struct {
 
         const field_values = try arena.alloc(struct {
             id: [:0]const u8,
+            widget_id: dvui.Id,
             value: []const u8,
-            modifyRef: LuaRef,
+            validate_ref: LuaRef,
+            modify_ref: LuaRef,
         }, form.fields.len);
 
+        const VALIDATE_ERROR_NAME = "validate_error";
         var enter_pressed = false;
         for (form.fields, 0..) |field, i| {
-            const VALIDATE_ERROR_NAME = "validate_error";
             dvui.labelNoFmt(@src(), field.name, .{}, .{ .id_extra = i });
             const te_id = blk: {
                 const te = dvui.textEntry(@src(), .{}, .{ .id_extra = i });
@@ -479,8 +481,10 @@ pub const Form = struct {
                 enter_pressed = enter_pressed or te.enter_pressed;
                 field_values[i] = .{
                     .id = field.id,
+                    .widget_id = te_id,
                     .value = te.textGet(),
-                    .modifyRef = field.modifyFn,
+                    .validate_ref = field.validateFn,
+                    .modify_ref = field.modifyFn,
                 };
 
                 if (field.validateFn == zlua.ref_nil) continue;
@@ -491,38 +495,17 @@ pub const Form = struct {
                     dvui.timer(te_id, 500_000); // 500ms
                 } else if (dvui.timerDone(te_id)) {
                     std.log.debug("debounce timer done. validating", .{});
-                    // Validate
-                    dumpLuaStack(app.lua);
-                    if (app.lua.getIndexRaw(zlua.registry_index, field.validateFn) != .function) {
-                        return error.InvalidLuaFunction;
-                    }
-                    // stack: [validate]
-                    _ = app.lua.pushString(te.getText());
-                    // stack: [validate, input]
-                    app.lua.protectedCall(.{
-                        .args = 1,
-                        .results = 2,
-                    }) catch {
-                        std.log.err("validate callback failed: {!s}", .{app.lua.toString(-1)});
-                        return .close;
-                    };
-                    // stack: [..., success, message?]
-                    if (!app.lua.toBoolean(-2)) {
-                        if (!app.lua.isNoneOrNil(-1) and !app.lua.isString(-1)) {
-                            return error.ExpectedString;
-                        }
-                        const message: []const u8 = app.lua.optString(-1) orelse "Invalid input!";
-                        dvui.dataSetSlice(null, te_id, VALIDATE_ERROR_NAME, message);
+                    if (try validateFieldText(app.lua, field.validateFn, te.getText())) |error_message| {
+                        dvui.dataSetSlice(null, te_id, VALIDATE_ERROR_NAME, error_message);
                     } else {
                         dvui.dataRemove(null, te_id, VALIDATE_ERROR_NAME);
                     }
                     app.lua.pop(2);
-                    // stack: [...]
                 }
                 break :blk te_id;
             };
 
-            if (dvui.dataGetSlice(null, te_id, VALIDATE_ERROR_NAME, []u8)) |message| {
+            if (dvui.dataGetSlice(null, te_id, VALIDATE_ERROR_NAME, [:0]u8)) |message| {
                 dvui.labelNoFmt(@src(), message, .{}, .{ .id_extra = i });
             }
         }
@@ -531,18 +514,41 @@ pub const Form = struct {
             if (app.lua.getIndexRaw(zlua.registry_index, form.callback) != .function) {
                 return error.InvalidLuaFunction;
             }
-            // stack: [callback]
+            // stack: [..., callback]
 
             app.lua.newTable();
-            // stack: [callback, fields_table]
+            // stack: [..., callback, fields_table]
             const field_table_idx = app.lua.getTop();
 
+            var validation_errors = false;
             for (field_values) |v| {
-                if (v.modifyRef != zlua.ref_nil) {
-                    if (app.lua.getIndexRaw(zlua.registry_index, v.modifyRef) != .function) {
+                if (v.validate_ref != zlua.ref_nil) {
+                    const old_errors = dvui.dataGetSlice(null, v.widget_id, VALIDATE_ERROR_NAME, [:0]u8) != null;
+                    if (try validateFieldText(app.lua, v.validate_ref, v.value)) |error_message| {
+                        dvui.dataSetSlice(null, v.widget_id, VALIDATE_ERROR_NAME, error_message);
+                    } else {
+                        dvui.dataRemove(null, v.widget_id, VALIDATE_ERROR_NAME);
+                    }
+                    // stack: [..., callback, fields_table, success, message?]
+                    app.lua.pop(2);
+                    // stack: [..., callback, fields_table]
+
+                    const new_errors = dvui.dataGetSlice(null, v.widget_id, VALIDATE_ERROR_NAME, [:0]u8) != null;
+                    // The error state changed, so a new frame should be rendered
+                    if (old_errors != new_errors) dvui.refresh(null, @src(), v.widget_id);
+
+                    if (new_errors) {
+                        validation_errors = true;
+                        continue;
+                    }
+                }
+                if (v.modify_ref != zlua.ref_nil) {
+                    if (app.lua.getIndexRaw(zlua.registry_index, v.modify_ref) != .function) {
                         return error.InvalidLuaFunction;
                     }
+                    // stack: [..., callback, fields_table, modify]
                     _ = app.lua.pushString(v.value);
+                    // stack: [..., callback, fields_table, modify, input]
                     app.lua.protectedCall(.{
                         .args = 1,
                         .results = 1,
@@ -550,28 +556,37 @@ pub const Form = struct {
                         std.log.err("modify failed: {!s}", .{app.lua.toString(-1)});
                         return error.CallbackFailed;
                     };
+                    // stack: [..., callback, fields_table, modified_input]
                 } else {
                     _ = app.lua.pushString(v.value);
+                    // stack: [..., callback, fields_table, input]
                 }
                 app.lua.setField(field_table_idx, v.id);
+                // stack: [..., callback, fields_table]
             }
-            app.lua.protectedCall(.{
-                .args = 1,
-                .results = 1,
-            }) catch {
-                std.log.err("form callback failed: {!s}", .{app.lua.toString(-1)});
-                return .close;
-            };
-
-            const item = app.lua.toUserdata(Menu.Item, -1) catch {
-                return error.NotUserdata;
-            };
-
-            if (try item.activate(app)) {
-                item.deinit(app.gpa);
-                return .close;
+            if (validation_errors) {
+                dvui.labelNoFmt(@src(), "There were validation errors", .{}, .{});
             } else {
-                return .ok;
+                // stack: [..., callback, fields_table]
+                app.lua.protectedCall(.{
+                    .args = 1,
+                    .results = 1,
+                }) catch {
+                    std.log.err("form callback failed: {!s}", .{app.lua.toString(-1)});
+                    return .close;
+                };
+                // stack: [..., item]
+
+                const item = app.lua.toUserdata(Menu.Item, -1) catch {
+                    return error.NotUserdata;
+                };
+
+                if (try item.activate(app)) {
+                    item.deinit(app.gpa);
+                    return .close;
+                } else {
+                    return .ok;
+                }
             }
         }
 
@@ -619,5 +634,33 @@ fn dumpLuaStack(lua: *zlua.Lua) void {
             .nil => std.debug.print("nil\n", .{}),
             else => std.debug.print("{?p}\n", .{lua.toPointer(idx)}),
         }
+    }
+}
+
+/// Validate `text` using the validation function pointed to by `validate_ref`
+/// (`validate_ref` must not be `ref_nil`). The returned error message should
+/// be copied, and then lua.pop(2) should be called.
+fn validateFieldText(lua: *zlua.Lua, validate_ref: LuaRef, text: []const u8) !?[:0]const u8 {
+    if (lua.getIndexRaw(zlua.registry_index, validate_ref) != .function) {
+        return error.InvalidLuaFunction;
+    }
+    // stack: [..., validate]
+    _ = lua.pushString(text);
+    // stack: [..., validate, input]
+    lua.protectedCall(.{
+        .args = 1,
+        .results = 2,
+    }) catch {
+        std.log.err("validate callback failed: {!s}", .{lua.toString(-1)});
+        return error.CallbackFailed;
+    };
+    // stack: [..., success, message?]
+    if (!lua.toBoolean(-2)) {
+        if (!lua.isNoneOrNil(-1) and !lua.isString(-1)) {
+            return error.ExpectedString;
+        }
+        return lua.optString(-1) orelse "Invalid input!";
+    } else {
+        return null;
     }
 }
