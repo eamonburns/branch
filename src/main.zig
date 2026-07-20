@@ -19,7 +19,7 @@ pub const dvui_app: dvui.App = .{
 pub const main = dvui.App.main;
 pub const panic = dvui.App.panic;
 pub const std_options: std.Options = .{
-    .logFn = dvui.App.logFn,
+    .logFn = if (@hasDecl(dvui.backend, "logFn")) dvui.backend.logFn else @import("log.zig").logFn,
 };
 
 var app_singleton: branch.App = .{
@@ -31,6 +31,9 @@ var app_singleton: branch.App = .{
 };
 
 fn appInit(_: *dvui.Window) !void {
+    @import("log.zig").initFile("branch.log") catch |err| {
+        std.log.warn("unable to start file logging: {t}", .{err});
+    };
     const init = dvui.App.main_init orelse unreachable;
     var args = try init.minimal.args.iterateAllocator(init.gpa);
     defer args.deinit();
@@ -45,6 +48,7 @@ fn appInit(_: *dvui.Window) !void {
 
 fn appDeinit() void {
     app_singleton.deinit();
+    @import("log.zig").deinit();
 }
 
 fn appFrame() !dvui.App.Result {
