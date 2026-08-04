@@ -12,10 +12,10 @@ pub fn logFn(
     defer _ = io.swapCancelProtection(prev);
 
     var buf: [64]u8 = undefined;
-    const term = output.lock(&buf);
+    const term = output.lock(&buf) catch return;
     defer output.unlock();
 
-    return std.log.defaultLogFileTerminal(level, scope, "({t}) " ++ format, .{output} ++ args, term) catch {};
+    return std.log.defaultLogFileTerminal(level, scope, format, args, term) catch {};
 }
 
 const Output = union(enum) {
@@ -26,12 +26,13 @@ const Output = union(enum) {
         mutex: std.Io.Mutex,
     },
 
-    pub fn lock(out: *Output, buf: []u8) std.Io.Terminal {
+    pub fn lock(out: *Output, buf: []u8) !std.Io.Terminal {
         return switch (out.*) {
             .stderr => std.debug.lockStderr(buf).terminal(),
             .file => |*f| {
                 f.mutex.lock(io) catch unreachable;
                 f.file_writer = f.file.writer(io, buf);
+                try f.file_writer.seekTo(try f.file.length(io));
                 return .{
                     .writer = &f.file_writer.interface,
                     .mode = .no_color,
@@ -64,6 +65,11 @@ pub fn initFile(log_file_path: []const u8) !void {
         .file_writer = undefined,
         .mutex = .init,
     } };
+    const length = try output.file.file.length(io);
+    if (length != 0) {
+        // Speparate previous logs with current log
+        try output.file.file.writePositionalAll(io, "\n\n\n", length);
+    }
 }
 
 pub fn deinit() void {

@@ -14,6 +14,8 @@ pub const App = struct {
 
     should_close: bool,
 
+    const log = std.log.scoped(.@"branch/app");
+
     pub fn init(io: Io, gpa: Allocator, script_file: [:0]const u8) !App {
         // === Initialize Lua === //
         const lua: *zlua.Lua = try .init(gpa);
@@ -23,12 +25,12 @@ pub const App = struct {
         lua_bindings.register(io, gpa, lua);
 
         lua.doString(@embedFile("branch.lua")) catch |err| {
-            std.log.err("{!s}", .{lua.toString(-1)});
+            log.err("{!s}", .{lua.toString(-1)});
             return err;
         };
 
         lua.doFile(script_file) catch |err| {
-            std.log.err("{!s}", .{lua.toString(-1)});
+            log.err("{!s}", .{lua.toString(-1)});
             return err;
         };
         const lua_site = lua.toUserdata(Menu.Item, -1) catch {
@@ -59,7 +61,7 @@ pub const App = struct {
 
     pub fn deinit(app: *App) void {
         if (app.screen_stack.items.len == 0) {
-            std.log.warn("App.deinit: empty screen stack?", .{});
+            log.warn("App.deinit: empty screen stack?", .{});
             return;
         } else {
             const root_screen = app.screen_stack.items[0];
@@ -106,7 +108,7 @@ pub const Menu = struct {
         pub const init: State = .{};
     };
 
-    const log = std.log.scoped(.@"branch.Menu");
+    const log = std.log.scoped(.@"branch/menu");
 
     pub const init: Menu = .{};
 
@@ -429,6 +431,8 @@ pub const Form = struct {
     callback: LuaRef,
     fields: []Field,
 
+    const log = std.log.scoped(.@"branch/form");
+
     pub const Field = struct {
         name: []const u8,
         id: [:0]const u8,
@@ -490,11 +494,11 @@ pub const Form = struct {
                 if (field.validateFn == zlua.ref_nil) continue;
 
                 if (te.text_changed) {
-                    std.log.debug("text changed in field {s}", .{field.id});
+                    log.debug("text changed in field {s}", .{field.id});
                     // (Re)start debounce timer
                     dvui.timer(te_id, 500_000); // 500ms
                 } else if (dvui.timerDone(te_id)) {
-                    std.log.debug("debounce timer done. validating", .{});
+                    log.debug("debounce timer done. validating", .{});
                     if (try validateFieldText(app.lua, field.validateFn, te.getText())) |error_message| {
                         dvui.dataSetSlice(null, te_id, VALIDATE_ERROR_NAME, error_message);
                     } else {
@@ -553,7 +557,7 @@ pub const Form = struct {
                         .args = 1,
                         .results = 1,
                     }) catch {
-                        std.log.err("modify failed: {!s}", .{app.lua.toString(-1)});
+                        log.err("modify failed: {!s}", .{app.lua.toString(-1)});
                         return error.CallbackFailed;
                     };
                     // stack: [..., callback, fields_table, modified_input]
@@ -572,7 +576,7 @@ pub const Form = struct {
                     .args = 1,
                     .results = 1,
                 }) catch {
-                    std.log.err("form callback failed: {!s}", .{app.lua.toString(-1)});
+                    log.err("form callback failed: {!s}", .{app.lua.toString(-1)});
                     return .close;
                 };
                 // stack: [..., item]
@@ -601,7 +605,7 @@ pub const Form = struct {
                         },
                         else => continue,
                     }
-                    std.log.debug("key event: {t}", .{e.evt.key.code});
+                    log.debug("key event: {t}", .{e.evt.key.code});
                 },
                 else => continue :events,
             }

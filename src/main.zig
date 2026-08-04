@@ -4,6 +4,8 @@ const zlua = @import("zlua");
 
 const branch = @import("branch");
 
+const log = std.log.scoped(.main);
+
 pub const dvui_app: dvui.App = .{
     .config = .{
         .options = .{
@@ -32,8 +34,9 @@ var app_singleton: branch.App = .{
 
 fn appInit(_: *dvui.Window) !void {
     @import("log.zig").initFile("branch.log") catch |err| {
-        std.log.warn("unable to start file logging: {t}", .{err});
+        log.warn("unable to start file logging: {t}", .{err});
     };
+    log.debug("Initializing app", .{});
     const init = dvui.App.main_init orelse unreachable;
     var args = try init.minimal.args.iterateAllocator(init.gpa);
     defer args.deinit();
@@ -47,6 +50,7 @@ fn appInit(_: *dvui.Window) !void {
 }
 
 fn appDeinit() void {
+    log.debug("Deinitializing app", .{});
     app_singleton.deinit();
     @import("log.zig").deinit();
 }
